@@ -62,6 +62,16 @@ def shapeCoordinate(coord: np.ndarray):
     uni1 = coord[np.sort(index), :]
     return uni1
 
+
+def assertCond(var, cond: bool, printType=True):
+    "Assert condition print message"
+    if printType:
+        assert cond, 'variable value: {0}\nits type: {1}'.format(var,
+                                                                 type(var))
+    else:
+        assert cond, 'variable value: {0}'.format(var)
+
+
 # Debug related
 
 

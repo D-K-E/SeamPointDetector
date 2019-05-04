@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'interface2.ui'
+# Form implementation generated from reading ui file 'interface.ui'
 #
 # Created by: PyQt5 UI code generator 5.6
 #
@@ -32,7 +32,7 @@ class Ui_MainWindow(object):
         self.toolBox = QtWidgets.QToolBox(self.verticalLayoutWidget)
         self.toolBox.setObjectName("toolBox")
         self.tableTool = QtWidgets.QWidget()
-        self.tableTool.setGeometry(QtCore.QRect(0, 0, 536, 525))
+        self.tableTool.setGeometry(QtCore.QRect(0, 0, 556, 525))
         self.tableTool.setObjectName("tableTool")
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.tableTool)
         self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
@@ -40,7 +40,7 @@ class Ui_MainWindow(object):
         self.tableWidget = QtWidgets.QTableWidget(self.tableTool)
         self.tableWidget.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.tableWidget.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.tableWidget.setColumnCount(2)
+        self.tableWidget.setColumnCount(3)
         self.tableWidget.setObjectName("tableWidget")
         self.tableWidget.setRowCount(0)
         self.verticalLayout_2.addWidget(self.tableWidget)
@@ -79,7 +79,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_2.addLayout(self.horizontalLayout_10)
         self.toolBox.addItem(self.tableTool, "")
         self.pointEditorTool = QtWidgets.QWidget()
-        self.pointEditorTool.setGeometry(QtCore.QRect(0, 0, 536, 525))
+        self.pointEditorTool.setGeometry(QtCore.QRect(0, 0, 556, 525))
         self.pointEditorTool.setObjectName("pointEditorTool")
         self.verticalLayout_4 = QtWidgets.QVBoxLayout(self.pointEditorTool)
         self.verticalLayout_4.setContentsMargins(0, 0, 0, 0)
@@ -183,6 +183,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_4.addLayout(self.horizontalLayout_9)
         self.toolBox.addItem(self.pointEditorTool, "")
         self.regionEditorTool = QtWidgets.QWidget()
+        self.regionEditorTool.setGeometry(QtCore.QRect(0, 0, 258, 215))
         self.regionEditorTool.setObjectName("regionEditorTool")
         self.verticalLayout_13 = QtWidgets.QVBoxLayout(self.regionEditorTool)
         self.verticalLayout_13.setContentsMargins(0, 0, 0, 0)
@@ -274,7 +275,7 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusbar)
 
         self.retranslateUi(MainWindow)
-        self.toolBox.setCurrentIndex(1)
+        self.toolBox.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):

@@ -8,6 +8,8 @@ from seammarker.seammarker.utils import stripExt
 from seammarker.seammarker.utils import saveJson
 from seammarker.seammarker.utils import shapeCoordinate
 from ui.designerOutput import Ui_MainWindow as UIMainWindow
+from ui.models import PointModel, RegionModel
+from ui.views import PointItem, RegionItem
 from PIL import Image, ImageQt
 from PySide2 import QtGui, QtCore, QtWidgets
 import sys
@@ -52,7 +54,72 @@ class AppWindowInit(UIMainWindow):
         pass
 
 
-class PointEditor(QtWidgets.QWidget):
+class Editor(QtWidgets.QWidget):
+    "Abstract editor class, handling table methods"
+
+    def __init__(self,
+                 tableWidget: QtWidgets.QTableWidget,
+                 colors={"red": QtCore.Qt.red,
+                         "black": QtCore.Qt.black,
+                         "green": QtCore.Qt.green,
+                         "yellow": QtCore.Qt.yellow,
+                         "cyan": QtCore.Qt.cyan,
+                         "blue": QtCore.Qt.blue,
+                         "gray": QtCore.Qt.gray,
+                         "magenta": QtCore.Qt.magenta,
+                         "white": QtCore.Qt.white},
+                 parent=None):
+        super().__init__(parent)
+        self.table = tableWidget
+        self.colors = colors
+        self.editorData = {}
+
+    def getRowData(self):
+        "Get current coords"
+        # x, y
+        row = self.table.currentRow()
+        pmodel = self.editorData.get(row)
+        return row, pmodel
+
+    def syncTableWithEditorData(self):
+        rcount = self.table.rowCount()
+        currentData = list(self.editorData.values())
+        self.editorData = {}
+        for r in range(rcount):
+            self.editorData[r] = currentData[r]
+
+    def setData2Row(self, rownb: int, model):
+        "Set data to given row"
+        self.editorData[rownb] = model
+        itemList = self.convertData2TableWidgetItems(model.data)
+        for i in range(len(itemList)):
+            newitem = itemList[i]
+            newitem.setFlags(QtCore.Qt.ItemIsEditable)
+            newitem.setFlags(QtCore.Qt.ItemIsSelectable)
+            self.table.setItem(rownb, i, newitem)
+
+    def removeRow(self):
+        "remove selected rows from table and points data"
+        row, data = self.getRowData()
+        if data is None:
+            return
+        self.table.removeRow(row)
+        self.editorData.pop(row)
+        self.syncTableWithEditorData()
+
+    def clearData(self):
+        self.editorData = {}
+        self.table.clearContents()
+        rowc = self.table.rowCount()
+        for i in range(rowc, -1, -1):
+            self.table.removeRow(i)
+
+
+
+
+
+
+class PointEditor(Editor):
     "Handler for integrating editor with individual point widgets"
 
     def __init__(self,
@@ -73,7 +140,6 @@ class PointEditor(QtWidgets.QWidget):
                          "magenta": QtCore.Qt.magenta,
                          "white": QtCore.Qt.white},
                  parent=None):
-        self.table = tableWidget
         self.directionWidget = directionWidget
         self.directionWidget.setEditable(False)
         self.directionWidget.setDuplicatesEnabled(False)
@@ -83,20 +149,12 @@ class PointEditor(QtWidgets.QWidget):
         self.sizeWidget = sizeWidget
         self.xValSpin = xValueWidget
         self.yValSpin = yValueWidget
-        pointDataTemplate = {'row index':
-                             {"coord": {'val': (0, 0), 'index': 'tableIndex'},
-                              "color": {"val": '', 'index': 'tableIndex'},
-                              "direction": {"val": "", 'index': 'tableIndex'},
-                              "threshold": {"val": 1, 'index': 'tableIndex'},
-                              "size": {"val": 1, 'index': 'tableIndex'},
-                              "x": {"val": 0, 'index': 'tableIndex'},
-                              "y": {"val": 0, 'index': 'tableIndex'},
-                              }
-                             }
-        self.pointsData = {}
+        pointDataTemplate = {'row index': PointModel({})}
+        self.editorData = {}
 
-        self.colors = colors
-        super().__init__(parent=parent)
+        super().__init__(tableWidget=tableWidget,
+                         colors=colors,
+                         parent=parent)
 
         # Events
         self.xValSpin.valueChanged.connect(self.setXval2Point)
@@ -104,17 +162,10 @@ class PointEditor(QtWidgets.QWidget):
         self.thresholdWidget.valueChanged.connect(self.setThreshold2Point)
         self.colorWidget.currentTextChanged.connect(
             self.setColor2Point)
-        self.directionWidget.currentTextChanged.connect(
+        self.directionWidget.valueChanged.connect(
             self.setDirection2Point)
         self.sizeWidget.valueChanged.connect(self.setSize2Point)
         self.table.itemSelectionChanged.connect(self.showRowData)
-
-    def getRowData(self):
-        "Get current coords"
-        # x, y
-        row = self.table.currentRow()
-        data = self.pointsData.get(row)
-        return row, data
 
     def setPointHeaders(self):
         pointProperties = ['coordinates', 'x', 'y', 'direction', 'threshold',
@@ -134,72 +185,70 @@ class PointEditor(QtWidgets.QWidget):
                 "direction": direction, "threshold": threshold}
 
     def setThreshold2Point(self):
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowData()
+        if pmodel is None:
             return
         newval = self.thresholdWidget.value()
-        data['threshold'] = newval
-        self.setData2Row(row, data)
+        pmodel.setThreshold(newval)
+        self.setData2Row(row, pmodel)
 
     def setDirection2Point(self):
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowData()
+        if pmodel is None:
             return
-        newval = self.directionWidget.currentText()
-        data['direction'] = newval
-        self.setData2Row(row, data)
+        newval = self.directionWidget.value()
+        pmodel.setDirection(newval)
+        self.setData2Row(row, pmodel)
 
     def setColor2Point(self):
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowData()
+        if pmodel is None:
             return
         newval = self.colorWidget.currentText()
-        data['color'] = newval
-        self.setData2Row(row, data)
+        pmodel.setColor(newval)
+        self.setData2Row(row, pmodel)
 
     def setSize2Point(self):
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowData()
+        if pmodel is None:
             return
         newval = self.sizeWidget.value()
-        data['size'] = newval
-        self.setData2Row(row, data)
+        pmodel.setSize(newval)
+        self.setData2Row(row, pmodel)
 
     def setXval2Point(self):
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowData()
+        if pmodel is None:
             return
         newval = self.xValSpin.value()
-        data['x'] = newval
-        coords = list(data['coordinates'])
-        coords[0] = newval
-        data['coordinates'] = tuple(coords)
-        self.setData2Row(row, data)
+        y = pmodel.pointData['y']
+        xy = {'x': newval, 'y': y}
+        pmodel.setCoordinates(xy)
+        self.setData2Row(row, pmodel)
 
     def setYval2Point(self):
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowpmodel()
+        if pmodel is None:
             return
         newval = self.yValSpin.value()
-        data['y'] = newval
-        coords = list(data['coordinates'])
-        coords[1] = newval
-        data['coordinates'] = tuple(coords)
-        self.setData2Row(row, data)
+        x = pmodel.pointData['x']
+        xy = {'x': x, 'y': newval}
+        pmodel.setCoordinates(xy)
+        self.setData2Row(row, pmodel)
 
     def showRowData(self):
         "Show point data on widgets"
-        row, data = self.getRowData()
-        if data is None:
+        row, pmodel = self.getRowData()
+        if pmodel is None:
             return
-        color = data['color']
-        direction = data['direction']
-        threshold = data['threshold']
-        size = data['size']
-        x = data['x']
-        y = data['y']
+        color = pmodel.pointData['color']
+        direction = pmodel.pointData['direction']
+        threshold = pmodel.pointData['threshold']
+        size = pmodel.pointData['size']
+        x = pmodel.pointData['x']
+        y = pmodel.pointdata['y']
         # self.coordsCombo.setCurrentText(str(pointCoords))
-        self.directionWidget.setCurrentText(direction)
+        self.directionWidget.setValue(direction)
         self.colorWidget.setCurrentText(color)
         self.thresholdWidget.setValue(threshold)
         self.xValSpin.setValue(x)
@@ -217,16 +266,6 @@ class PointEditor(QtWidgets.QWidget):
         sizeItem = QtWidgets.QTableWidgetItem(str(data['size']))
         return [coordsItem, xItem, yItem, directionItem,
                 threshItem, sizeItem, colorItem]
-
-    def setData2Row(self, rownb: int, data: dict):
-        "Set data to given row"
-        self.pointsData[rownb] = data
-        itemList = self.convertData2TableWidgetItems(data)
-        for i in range(len(itemList)):
-            newitem = itemList[i]
-            newitem.setFlags(QtCore.Qt.ItemIsEditable)
-            newitem.setFlags(QtCore.Qt.ItemIsSelectable)
-            self.table.setItem(rownb, i, newitem)
 
     def addPointCoordsWithCurrentData(self,
                                       pointCoords: (int, int)):
@@ -248,70 +287,69 @@ class PointEditor(QtWidgets.QWidget):
             self.table.insertRow(rownb)
             self.setData2Row(rownb, data)
 
-    def setTableData2PointsData(self):
-        rowcount = self.table.rowCount()
-        self.pointsData = {}
-        for r in range(rowcount):
-            self.pointsData[r] = {}
-            # coords
-            item = self.table.item(r, 0)
-            item = item.text()
-            if item != '':
-                item = item.strip('()')
-                item = tuple([int(i) for i in item.split(',') if i])
-                self.pointsData[r]['coordinates'] = item
-            # x, y
-            item = self.table.item(r, 1)
-            item = item.text()
-            item = int(item)
-            self.pointsData[r]['x'] = item
-            item = self.table.item(r, 2)
-            item = item.text()
-            item = int(item)
-            self.pointsData[r]['y'] = item
-            # direction
-            item = self.table.item(r, 3)
-            item = item.text()
-            self.pointsData[r]['direction'] = item
-            # threshold
-            item = self.table.item(r, 4)
-            item = item.text()
-            item = int(item)
-            self.pointsData[r]['threshold'] = item
-            # size
-            item = self.table.item(r, 5)
-            item = item.text()
-            item = int(item)
-            self.pointsData[r]['size'] = item
-            # color
-            item = self.table.item(r, 6)
-            item = item.text()
-            self.pointsData[r]['color'] = item
 
-    def removeRow(self):
-        "remove selected rows from table and points data"
-        row, data = self.getRowData()
-        if data is None:
-            return
-        self.table.removeRow(row)
-        self.setTableData2PointsData()
+class RegionEditor(QtWidgets.QWidget):
+    "Region editor for handling region data"
+    def __init__(self, table: QtWidgets.QTableWidget,
+                 parent=None):
+        super().__init__(parent)
+        self.table = table
+        tableColumns = ['regionName', "boundingRect", "regionColor"]
+        self.table.setColumnCount(len(tableColumns))
+        self.table.setHorizontalHeaderLabels(tableColumns)
+        self.editorData = {}
+        editorDataTemplate = {"rowNo": RegionModel({})}
 
-    def clearData(self):
-        self.pointsData = {}
-        self.table.clearContents()
-        rowc = self.table.rowCount()
-        for i in range(rowc, -1, -1):
-            self.table.removeRow(i)
+    def convertData2TableWidgetItems(self, data: dict):
+        "Convert data to table widget items"
+        items = []
+        brect = data['boundingRect']
+        brect = ','.join([brect['x'], brect['y'], brect['width'],
+                          brect['height']
+                          ])
+        rname = data['regionName']
+        color = data['color']
+        return [
+            QtWidgets.QTableWidgetItem(rname),
+            QtWidgets.QTableWidgetItem(brect),
+            QtWidgets.QTableWidgetItem(color),
+        ]
+
+    def syncTableWithEditorData(self):
+        rcount = self.table.rowCount()
+        currentData = list(self.editorData.values())
+        self.editorData = {}
+        for r in range(rcount):
+            self.editorData[r] = currentData[r]
+
+    def setData2Row(self, rownb: int, rmodel: RegionModel):
+        "Set data to given row"
+        self.editorData[rownb] = rmodel
+        data = rmodel.regionData.copy()
+        data['regionName'] = 'region-' + str(rownb) 
+        itemList = self.convertData2TableWidgetItems(data)
+
+
+class EditorDrawer(QtWidgets.QWidget):
+    "Draws point or region editor"
+    def __init__(self, editor: QtWidgets.QWidget,
+                 parent=None):
+        super().__init__(parent)
+        self.editor = editor
+        if isinstance(editor, RegionEditor):
+            self.isRegion = True
+        else:
+            self.isRegion = False
 
 
 class SceneCanvas(QtWidgets.QGraphicsScene):
     "Mouse events overriding for graphics scene with editor integration"
 
     def __init__(self,
-                 pointEditor: PointEditor,
+                 drawer: EditorDrawer,
                  image: QtGui.QPixmap,
                  parent=None):
-        self.pointEditor = pointEditor
+        self.drawer = drawer
         self.image = image
         if image:
             imw = image.width()
@@ -324,48 +362,25 @@ class SceneCanvas(QtWidgets.QGraphicsScene):
 
     def addPoint2PointEditor(self, point):
         "Add point coords to point editor"
-        self.pointEditor.addPointCoordsWithCurrentData(point)
+        self.editorWidget.addPointCoordsWithCurrentData(point)
 
-    def drawPointsOnImage(self):
+    def passPoint2Drawer(self, point: QtCore.QPointF):
+        self.drawer.add2Point2Editor(point)
+
+    def renderItems(self):
+        "render items on scene"
         self.clear()
         image = self.image.copy()
-        imw, imh = image.width(), image.height()
-        result = QtGui.QPixmap(w=imw, h=imh)
-        result.fill(QtCore.Qt.white)
-        painter = QtGui.QPainter()
-        painter.begin(image)
-        painter.drawPixmap(0, 0, image)
-        # pdb.set_trace()
-        for row, data in self.pointEditor.pointsData.items():
-            if data['color'] == '':
-                color = QtCore.Qt.red
-            else:
-                color = self.pointEditor.colors[data['color']]
-            size = data['size']
-            brush = QtGui.QBrush(color)
-            painter.setBrush(brush)
-            painter.setPen(color)
-            px = data['x']
-            py = data['y']
-            painter.drawEllipse(px, py, size, size)
-        #
-        painter.end()
         pixmapItem = QtWidgets.QGraphicsPixmapItem(image)
-        self.addItem(pixmapItem)
-
-    def drawPixmapImage(self):
-        image = self.image.copy()
-        self.clear()
-        pixmapItem = QtWidgets.QGraphicsPixmapItem(image)
+        editorItems = self.drawer.getItems()
+        editorItems = [item.setParentItem(pixmapItem) for item in editorItems]
         self.addItem(pixmapItem)
 
     def mouseDoubleClickEvent(self, event):
         "Overriding double click event"
         point = event.scenePos()
-        x, y = point.x(), point.y()
-        point = (int(x), int(y))
-        self.addPoint2PointEditor(point)
-        self.drawPointsOnImage()
+        self.passPoint2Drawer(point)
+        self.renderItems()
 
 
 class AppWindowFinal(AppWindowInit):
@@ -394,6 +409,8 @@ class AppWindowFinal(AppWindowInit):
         combovals = list(self.colors.keys())
         self.pointColorComboBox.addItems(combovals)
         self.pointColorComboBox.setCurrentText("red")
+        self.regionColorComboBox.addItems(combovals)
+        self.regionColorComboBox.setCurrentText("green")
         self.directions = ['down', 'up', 'left', 'right']
         self.pointDirectionComboBox.addItems(self.directions)
         self.pointDirectionComboBox.setCurrentText("down")
@@ -418,7 +435,8 @@ class AppWindowFinal(AppWindowInit):
 
         # table widget related
         self.tableWidget.setHorizontalHeaderLabels(["image files",
-                                                    "point files"])
+                                                    "point files",
+                                                    "region files"])
 
         # Main Window Events
         self.main_window.setWindowTitle("Seam Marker using Points")

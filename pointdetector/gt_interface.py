@@ -115,10 +115,6 @@ class Editor(QtWidgets.QWidget):
             self.table.removeRow(i)
 
 
-
-
-
-
 class PointEditor(Editor):
     "Handler for integrating editor with individual point widgets"
 
@@ -179,7 +175,7 @@ class PointEditor(Editor):
         "set points and related data to widgets"
         color = self.colorWidget.currentText()
         pointSize = self.sizeWidget.value()
-        direction = self.directionWidget.currentText()
+        direction = self.directionWidget.value()
         threshold = self.thresholdWidget.value()
         return {"color": color, "size": pointSize,
                 "direction": direction, "threshold": threshold}
@@ -288,8 +284,9 @@ class PointEditor(Editor):
             self.setData2Row(rownb, data)
 
 
-class RegionEditor(QtWidgets.QWidget):
+class RegionEditor(Editor):
     "Region editor for handling region data"
+
     def __init__(self, table: QtWidgets.QTableWidget,
                  parent=None):
         super().__init__(parent)
@@ -315,19 +312,23 @@ class RegionEditor(QtWidgets.QWidget):
             QtWidgets.QTableWidgetItem(color),
         ]
 
-    def syncTableWithEditorData(self):
-        rcount = self.table.rowCount()
-        currentData = list(self.editorData.values())
-        self.editorData = {}
-        for r in range(rcount):
-            self.editorData[r] = currentData[r]
-
     def setData2Row(self, rownb: int, rmodel: RegionModel):
         "Set data to given row"
         self.editorData[rownb] = rmodel
         data = rmodel.regionData.copy()
-        data['regionName'] = 'region-' + str(rownb) 
+        data['regionName'] = 'region-' + str(rownb)
         itemList = self.convertData2TableWidgetItems(data)
+        for i in range(len(itemList)):
+            newitem = itemList[i]
+            newitem.setFlags(QtCore.Qt.ItemIsEditable)
+            newitem.setFlags(QtCore.Qt.ItemIsSelectable)
+            self.table.setItem(rownb, i, newitem)
+
+    def addRegion2Table(self, regionModel: RegionModel):
+        "add region item data to table"
+        rowcount = self.table.rowCount()
+        self.table.insertRow(rowcount)
+        self.setData2Row(rowcount, regionModel)
 
 
 class EditorDrawer(QtWidgets.QWidget):
@@ -411,9 +412,7 @@ class AppWindowFinal(AppWindowInit):
         self.pointColorComboBox.setCurrentText("red")
         self.regionColorComboBox.addItems(combovals)
         self.regionColorComboBox.setCurrentText("green")
-        self.directions = ['down', 'up', 'left', 'right']
-        self.pointDirectionComboBox.addItems(self.directions)
-        self.pointDirectionComboBox.setCurrentText("down")
+        self.pointDirectionSpin.setValue(0)
         pointProperties = ['coordinates', 'x', 'y', 'direction', 'threshold',
                            'size', 'color']
         self.pointsTable.setColumnCount(len(pointProperties))
@@ -422,7 +421,7 @@ class AppWindowFinal(AppWindowInit):
         )
         self.pointEditor = PointEditor(
             tableWidget=self.pointsTable,
-            directionWidget=self.pointDirectionComboBox,
+            directionWidget=self.pointDirectionSpin,
             thresholdWidget=self.thresholdSpin,
             colorWidget=self.pointColorComboBox,
             xValueWidget=self.pointXSpinBox,

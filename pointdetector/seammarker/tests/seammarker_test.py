@@ -3,11 +3,11 @@
 # No warranties, see LICENSE
 # Tests the main functionality of point carver
 
+from pointdetector.seammarker.seammarker.seammarker import (SeamMarker,
+                                                            SeamFuncsAI)
+from pointdetector.seammarker.seammarker.utils import shapeCoordinate
 
-from pointcarver.src.seammarker import SeamMarker
-from pointcarver.src.utils import readImage, readPoints, parsePoints, stripExt
-from pointcarver.src.utils import qt_image_to_array
-from pointcarver.src.utils import shapeCoordinate
+
 from PIL import Image, ImageQt, ImageOps
 import unittest
 import numpy as np
@@ -117,7 +117,10 @@ class PointCarverTest(unittest.TestCase):
 
     def setUp(self):
         "set up the pointcarver class"
-        currentdir = os.getcwd()
+        currentdir = str(__file__)
+        currentdir = os.path.join(currentdir, os.pardir)
+        currentdir = os.path.join(currentdir, os.pardir)
+        currentdir = os.path.abspath(currentdir)
         testdir = os.path.join(currentdir, "tests")
         assetdir = os.path.join(testdir, 'assets')
         self.assetdir = assetdir
@@ -454,6 +457,15 @@ class PointCarverTest(unittest.TestCase):
         self.compareArrays(emap, vietEmapcp,
                            "Point carver energy calculation function")
 
+    def test_seammarker_minimum_seam_ai(self):
+        vietImcp = self.loadImageCol()
+        vietslice = vietImcp[:, 550:600]
+        carver = SeamMarker(img=vietImcp)
+        emap = carver.calc_energy(vietslice)
+        funcs = SeamFuncsAI()
+        coordspath = funcs.minimum_seam(vietslice, emap)
+        pdb.set_trace()
+
     def test_seammarker_minimum_seam_emap_matrix(self):
         "tests the minimum seam function of pointcarver"
         matrixPath = os.path.join(self.npdir, "vietSliceMatrix.npy")
@@ -463,8 +475,9 @@ class PointCarverTest(unittest.TestCase):
         carver = SeamMarker(img=vietImcp)
         emap = carver.calc_energy(vietslice)
         mat, backtrack = carver.minimum_seam(img=vietslice, emap=emap)
-        self.compareArrays(mat, compmatrix,
-                           "Point carver minimum seam function emap given, checking matrix")
+        self.compareArrays(
+            mat, compmatrix,
+            "Point carver minimum seam function emap given, checking matrix")
 
     def test_seammarker_minimum_seam_emap_backtrack(self):
         backtrackPath = os.path.join(self.npdir, 'vietSliceBacktrack.npy')

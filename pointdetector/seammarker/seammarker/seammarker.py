@@ -118,6 +118,237 @@ class SeamFuncs:
         return img, mask
 
 
+class SeamFuncsAI(SeamFuncs):
+    "Seam funcs ai"
+
+    def __init__(self):
+        self.mark_color = [0, 255, 0]
+
+    def goUp(self, currentRow: int,
+             currentColumn: int):
+        "Go up"
+        return currentRow - 1, currentColumn
+
+    def goDown(self, currentRow: int, currentColumn: int):
+        "go down"
+        return currentRow + 1, currentColumn
+
+    def goLeft(self, currentRow: int, currentColumn: int):
+        "go left"
+        return currentRow, currentColumn - 1
+
+    def goRight(self, currentRow: int, currentColumn: int):
+        "go left"
+        return currentRow, currentColumn + 1
+
+    def goLeftUp(self, currentRow: int, currentColumn: int):
+        "go left up"
+        return currentRow - 1, currentColumn - 1
+
+    def goRightUp(self, currentRow: int, currentColumn: int):
+        "go left up"
+        return currentRow - 1, currentColumn + 1
+
+    def goLeftDown(self, currentRow: int,
+                   currentColumn: int):
+        "go left up"
+        return currentRow + 1, currentColumn - 1
+
+    def goRightDown(self, currentRow: int,
+                    currentColumn: int):
+        "go left up"
+        return currentRow + 1, currentColumn + 1
+
+    def moveFromCoordinate(self, moveDirection: str,
+                           currentRow: int,
+                           currentColumn: int):
+        "Move from direction"
+        if moveDirection == "up":
+            row, column = self.goUp(currentRow,
+                                    currentColumn)
+        elif moveDirection == "down":
+            row, column = self.goDown(currentRow,
+                                      currentColumn)
+        elif moveDirection == "left":
+            row, column = self.goLeft(currentRow,
+                                      currentColumn)
+        elif moveDirection == "right":
+            row, column = self.goRight(currentRow,
+                                       currentColumn)
+        elif moveDirection == "leftUp":
+            row, column = self.goLeftUp(currentRow,
+                                        currentColumn)
+        elif moveDirection == "leftDown":
+            row, column = self.goLeftDown(currentRow,
+                                          currentColumn)
+        elif moveDirection == "rightUp":
+            row, column = self.goRightUp(currentRow,
+                                         currentColumn)
+        elif moveDirection == "rightDown":
+            row, column = self.goRightDown(currentRow,
+                                           currentColumn)
+        return row, column
+
+    def testGoalCoordinate(self,
+                           currentRow: int,
+                           currentColumn: int,
+                           goals: [(int, int)],
+                           ):
+        "check whether the given current row is in goal range"
+        return (currentRow, currentColumn) in goals
+
+    def checkLimit(self,
+                   currentRow: int,
+                   currentColumn: int,
+                   rownb: int,
+                   colnb: int) -> bool:
+        "check limit"
+        inRow = currentRow >= 0 and currentRow < rownb
+        inCol = currentColumn >= 0 and currentColumn < colnb
+        return bool(inRow and inCol)
+
+    def getStepCost(self,
+                    currentRow: int,
+                    currentColumn: int,
+                    nextRow: int,
+                    nextColumn: int,
+                    img: np.ndarray):
+        "Get step cost"
+        current_pixel_val = img[currentRow, currentColumn]
+        next_pixel_val = img[nextRow, nextColumn]
+        next_pixel_sum = np.sum(next_pixel_val, dtype=np.int)
+        current_pixel_sum = np.sum(current_pixel_val, dtype=np.int)
+        stepcost = 1
+        pixelsum =  next_pixel_sum + current_pixel_sum
+        return stepcost + pixelsum
+
+    def checkFrontier(self,
+                      currentRow: int,
+                      currentColumn: int,
+                      frontier: list):
+        "check if current row and column is in frontier"
+        checkval = False
+        for row, col, step_cost, path in frontier:
+            if (row, col) == (currentRow, currentColumn):
+                checkval = True
+        #
+        return checkval
+
+    def getPathCost(self, img: np.ndarray,
+                    path: [(int, int)],
+                    upperBound: int):
+        ""
+        pcost = 0
+        for p in path:
+            pixelval = np.sum(img[p[0], p[1]], dtype=np.int)
+            pcost += pixelval
+        #
+        if pcost > upperBound:
+            return float('inf')
+        else:
+            return pcost
+
+    def checkAvailable(self, currentRow: int,
+                       currentColumn: int,
+                       path: [(int, int)],
+                       upperBound: int,
+                       img: np.ndarray):
+        ""
+        pixelval = np.sum(img[currentRow, currentColumn],
+                          dtype=np.int)
+        pcost = 0
+        if pixelval > 0:
+            pcost = self.getPathCost(img=img,
+                                     path=path,
+                                     upperBound=upperBound)
+        return bool(pcost < float('inf'))
+
+    def search_best_path(self, img: np.ndarray):
+        """
+        Search best path for marking the seam
+
+        The algorithm is mix between a*star path search
+        with upper bound pruning implemented in availability function
+        """
+        explored = set()
+        explored_list = []
+        frontier = []
+        actions = [
+            "down", "left", "right",
+            "leftDown","rightDown"
+        ]
+        total_possible_energy = 255 * img.shape[0] + 255 * img.shape[1]
+        initial_state = [0, 0, 0, []]
+        goals = [(img.shape[0]-1, col) for col in range(img.shape[1])]
+        frontier.append(initial_state)
+        while frontier:
+            row, col, step_cost, path = frontier.pop()
+            path_copy = path.copy()
+            path_copy.append((row, col))
+            explored.add((row, col))
+            if self.testGoalCoordinate(currentRow=row,
+                                       currentColumn=col,
+                                       goals=goals
+                                       ):
+                return path_copy
+            for act in actions:
+                nextRow, nextCol = self.moveFromCoordinate(moveDirection=act,
+                                                           currentRow=row,
+                                                           currentColumn=col)
+                if self.checkLimit(currentRow=nextRow,
+                                   currentColumn=nextCol,
+                                   rownb=img.shape[0],
+                                   colnb=img.shape[1]) is False:
+                    continue
+                #
+                if self.checkAvailable(currentRow=nextRow,
+                                       currentColumn=nextCol,
+                                       img=img,
+                                       path=path_copy,
+                                       upperBound=total_possible_energy):
+                    if ((nextRow, nextCol) not in explored and
+                            self.checkFrontier(currentRow=nextRow,
+                                               currentColumn=nextCol,
+                                               frontier=frontier) is False):
+                        step_cost = self.getStepCost(currentRow=row,
+                                                     currentColumn=col,
+                                                     nextRow=nextRow,
+                                                     nextColumn=nextCol,
+                                                     img=img)
+                        frontier.append((nextRow, nextCol,
+                                         step_cost,
+                                         path_copy))
+                        frontier.sort(key=lambda x: x[2], reverse=True)
+
+    def minimum_seam(self,
+                     img: np.ndarray([], dtype=np.uint8),
+                     emap=None):
+        "Compute the minimum seam"
+        r, c, _ = img.shape
+
+        # if the energy map is already calculated
+        if emap is not None:
+            energy_map = emap
+        else:
+            energy_map = self.calc_energy(img)
+        #
+        coordinate_path = self.search_best_path(img=energy_map)
+        return coordinate_path
+
+    def mark_column(self, img: np.ndarray,
+                    emap=None,
+                    mark_color=[255, 120, 120]):
+        "mark column implemented with best search path"
+        imcp = img.copy()
+        mask = np.zeros_like(imcp)
+        coordpath = self.minimum_seam(imcp, emap)
+        for coord in coordpath:
+            row, col = coord
+            imcp[row, col] = mark_color
+            mask[row, col] = mark_color
+        return imcp, mask
+
+
 class SeamMarker(SeamFuncs):
     def __init__(self,
                  img: np.ndarray([], dtype=np.uint8),
@@ -371,14 +602,14 @@ class SeamMarker(SeamFuncs):
                                                             coord2, colSlice,
                                                             isUpTo)
         if isUpTo is False:
-            fillvals = [i for i in range(coord2val-1, # since we prepend
+            fillvals = [i for i in range(coord2val-1,  # since we prepend
                                          # this array later on
                                          coord1val-1, -1)]
         else:
             fillvals = [i for i in range(coord2val+1, coord1val+1, 1)]
         #
-        return (coord1, coord2, 
-                COORD1KEEP, COORD2KEEP, 
+        return (coord1, coord2,
+                COORD1KEEP, COORD2KEEP,
                 coord1val, coord2val,
                 fillvals)
 
@@ -747,7 +978,7 @@ class SeamMarker(SeamFuncs):
 
     def makeCoordGroups(self, pointDataCoords: dict):
         "make coordinate groups based on carve directions"
-        groups = {"up":[], "down": [], "left": [], "right": []}
+        groups = {"up": [], "down": [], "left": [], "right": []}
         for i, pointData in pointDataCoords.items():
             groups[pointData['direction']].append(pointData)
         return groups
@@ -766,7 +997,7 @@ class SeamMarker(SeamFuncs):
             pointCoordMap = {
                 (pointData['y'],
                  pointData['x']
-                 ):pointData['seamCoordinates'] for pointData in pointDataCoords
+                 ): pointData['seamCoordinates'] for pointData in pointDataCoords
             }
             pairs = self.makePairsFromPoints(plist, colSlice,
                                              isXFirst=False)
@@ -776,7 +1007,7 @@ class SeamMarker(SeamFuncs):
                 point2 = pair[1]
                 coord1 = pointCoordMap[point1]
                 coord2 = pointCoordMap[point2]
-                segment = self.sliceImageWithMarkCoordPair(image, coord1, 
+                segment = self.sliceImageWithMarkCoordPair(image, coord1,
                                                            coord2, colSlice,
                                                            isUpTo)
                 segments.append(segment)

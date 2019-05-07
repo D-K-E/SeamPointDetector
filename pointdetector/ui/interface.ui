@@ -31,14 +31,14 @@
         <item>
          <widget class="QToolBox" name="toolBox">
           <property name="currentIndex">
-           <number>0</number>
+           <number>1</number>
           </property>
           <widget class="QWidget" name="tableTool">
            <property name="geometry">
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>556</width>
+             <width>536</width>
              <height>525</height>
             </rect>
            </property>
@@ -140,7 +140,7 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>556</width>
+             <width>536</width>
              <height>525</height>
             </rect>
            </property>
@@ -182,7 +182,11 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QComboBox" name="pointDirectionComboBox"/>
+                 <widget class="QSpinBox" name="pointDirectionSpin">
+                  <property name="maximum">
+                   <number>359</number>
+                  </property>
+                 </widget>
                 </item>
                </layout>
               </item>
@@ -327,8 +331,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>258</width>
-             <height>215</height>
+             <width>536</width>
+             <height>525</height>
             </rect>
            </property>
            <attribute name="label">

@@ -61,14 +61,21 @@ class SeamFuncs:
             for j in range(0, c):
                 # Handle the left edge of the image, to ensure we don't index -1
                 if j == 0:
-                    maprow = M[i - 1, j:j + 2]
-                    idx = np.argmin(maprow)
-                    backtrack[i, j] = idx + j
-                    min_energy = M[i - 1, idx + j]
+                    offset_value = j
+                    colrange = j + 2
+                    maprow = M[i - 1, offset_value:colrange]
+                    min_energy_indx_in_row = np.argmin(maprow)
+                    min_energy_indx = min_energy_indx_in_row + offset_value
+                    backtrack[i, j] = min_energy_indx
+                    min_energy = M[i - 1, min_energy_indx]
                 else:
-                    idx = np.argmin(M[i - 1, j - 1:j + 2])
-                    backtrack[i, j] = idx + j - 1
-                    min_energy = M[i - 1, idx + j - 1]
+                    offset_value = j - 1
+                    colrange = j + 2
+                    maprow = M[i - 1, offset_value:colrange]
+                    min_energy_indx_in_row = np.argmin(maprow)
+                    min_energy_indx = min_energy_indx_in_row + offset_value
+                    backtrack[i, j] = min_energy_indx
+                    min_energy = M[i - 1, min_energy_indx]
 
                 M[i, j] += min_energy
 
@@ -123,6 +130,9 @@ class SeamFuncsAI(SeamFuncs):
 
     def __init__(self):
         self.mark_color = [0, 255, 0]
+        self.pathCost = 0
+        self.path = []
+        self.frontiers = []
 
     def goUp(self, currentRow: int,
              currentColumn: int):
@@ -205,7 +215,7 @@ class SeamFuncsAI(SeamFuncs):
         "check limit"
         inRow = currentRow >= 0 and currentRow < rownb
         inCol = currentColumn >= 0 and currentColumn < colnb
-        return bool(inRow and inCol)
+        return inRow and inCol
 
     def getStepCost(self,
                     currentRow: int,
@@ -219,7 +229,7 @@ class SeamFuncsAI(SeamFuncs):
         next_pixel_sum = np.sum(next_pixel_val, dtype=np.int)
         current_pixel_sum = np.sum(current_pixel_val, dtype=np.int)
         stepcost = 1
-        pixelsum =  next_pixel_sum + current_pixel_sum
+        pixelsum = next_pixel_sum + current_pixel_sum
         return stepcost + pixelsum
 
     def checkFrontier(self,
@@ -231,37 +241,57 @@ class SeamFuncsAI(SeamFuncs):
         for row, col, step_cost, path in frontier:
             if (row, col) == (currentRow, currentColumn):
                 checkval = True
+                # print('in frontier')
         #
         return checkval
 
+    def getUpperBound(self, img: np.ndarray,
+                      path: [(int, int)]):
+        """
+        Get upper bound from path
+
+        The idea is to compute the energy of
+        the hypothenus of the extreme points.
+        column extreme and row extreme
+        """
+        col_extrema = sorted(path, key=lambda x: x[1], reverse=True)
+        col_extrema = col_extrema[-1]
+        col_extrema = np.array([255 for i in range(col_extrema[1])])
+        colsum = np.sum(col_extrema, dtype=np.int)
+        row_extrema = sorted(path, key=lambda x: x[0], reverse=True)
+        row_extrema = row_extrema[-1]
+        row_extrema = row_extrema[0] * 255
+        row_extrema = np.array([255 for i in range(row_extrema[0])])
+        rowsum = np.sum(row_extrema)
+        return colsum + rowsum
+
     def getPathCost(self, img: np.ndarray,
-                    path: [(int, int)],
-                    upperBound: int):
+                    path: [(int, int)]):
         ""
         pcost = 0
         for p in path:
             pixelval = np.sum(img[p[0], p[1]], dtype=np.int)
             pcost += pixelval
         #
+        upperBound = self.getUpperBound(img, path)
         if pcost > upperBound:
-            return float('inf')
+            return None
         else:
             return pcost
 
     def checkAvailable(self, currentRow: int,
                        currentColumn: int,
                        path: [(int, int)],
-                       upperBound: int,
                        img: np.ndarray):
         ""
         pixelval = np.sum(img[currentRow, currentColumn],
                           dtype=np.int)
         pcost = 0
         if pixelval > 0:
-            pcost = self.getPathCost(img=img,
-                                     path=path,
-                                     upperBound=upperBound)
-        return bool(pcost < float('inf'))
+            pcost = self.getPathCost(img=img, path=path)
+            self.pathCost = pcost
+            # print('path cost: ', str(pcost))
+        return pcost is not None
 
     def search_best_path(self, img: np.ndarray):
         """
@@ -271,13 +301,17 @@ class SeamFuncsAI(SeamFuncs):
         with upper bound pruning implemented in availability function
         """
         explored = set()
-        explored_list = []
         frontier = []
-        actions = [
-            "down", "left", "right",
-            "leftDown","rightDown"
-        ]
+        actions = ["down",
+                   # "left",
+                   # "right",
+                   "leftDown",
+                   "rightDown"
+                   ]
         total_possible_energy = 255 * img.shape[0] + 255 * img.shape[1]
+        # possible_steps = img.shape[0] + img.shape[1]
+        # total_possible_energy += possible_steps
+        total_possible_energy = 255 * img.shape[0] * img.shape[1]
         initial_state = [0, 0, 0, []]
         goals = [(img.shape[0]-1, col) for col in range(img.shape[1])]
         frontier.append(initial_state)
@@ -286,6 +320,7 @@ class SeamFuncsAI(SeamFuncs):
             path_copy = path.copy()
             path_copy.append((row, col))
             explored.add((row, col))
+            self.path = path_copy
             if self.testGoalCoordinate(currentRow=row,
                                        currentColumn=col,
                                        goals=goals
@@ -304,8 +339,7 @@ class SeamFuncsAI(SeamFuncs):
                 if self.checkAvailable(currentRow=nextRow,
                                        currentColumn=nextCol,
                                        img=img,
-                                       path=path_copy,
-                                       upperBound=total_possible_energy):
+                                       path=path_copy):
                     if ((nextRow, nextCol) not in explored and
                             self.checkFrontier(currentRow=nextRow,
                                                currentColumn=nextCol,
@@ -319,6 +353,39 @@ class SeamFuncsAI(SeamFuncs):
                                          step_cost,
                                          path_copy))
                         frontier.sort(key=lambda x: x[2], reverse=True)
+
+    def min_seam_with_cumsum(self,
+                             img: np.ndarray):
+        r, c = img.shape[:2]
+        M = img.copy()
+        backtrack = np.zeros_like(M, dtype=np.int)
+        M = np.cumsum(M, axis=0)
+
+        for i in range(1, r):
+            for j in range(0, c):
+                # Handle the left edge of the image,
+                # to ensure we don't index -1
+                if j == 0:
+                    offset_value = j
+                    colrange = j + 2
+                    maprow = M[i - 1, offset_value:colrange]
+                    min_energy_indx_in_row = np.argmin(maprow)
+                    min_energy_indx = min_energy_indx_in_row + offset_value
+                    backtrack[i, j] = min_energy_indx
+                    min_energy = M[i - 1, min_energy_indx]
+                else:
+                    offset_value = j - 1
+                    colrange = j + 2
+                    maprow = M[i - 1, offset_value:colrange]
+                    min_energy_indx_in_row = np.argmin(maprow)
+                    min_energy_indx = min_energy_indx_in_row + offset_value
+                    backtrack[i, j] = min_energy_indx
+                    min_energy = M[i - 1, min_energy_indx]
+
+                M[i, j] += min_energy
+
+        return M, backtrack
+
 
     def minimum_seam(self,
                      img: np.ndarray([], dtype=np.uint8),

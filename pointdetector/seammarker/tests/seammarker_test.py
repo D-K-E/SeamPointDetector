@@ -467,15 +467,15 @@ class PointCarverTest(unittest.TestCase):
         self.compareArrays(emap, vietEmapcp,
                            "Point carver energy calculation function")
 
-    # def test_seammarker_minimum_seam_ai(self):
-        # vietImcp = self.loadImageCol()
-        # vietslice = vietImcp[:, 550:600]
-        # carver = SeamMarker(img=vietImcp)
-        # emap = carver.calc_energy(vietslice)
-        # funcs = SeamFuncsAI()
-        # pdb.set_trace()
-        # coordspath = funcs.minimum_seam(vietslice, emap)
-        # pdb.set_trace()
+    def test_seammarker_minimum_seam_ai(self):
+        vietImcp = self.loadImageCol()
+        vietslice = vietImcp[:, 550:600]
+        carver = SeamMarker(img=vietImcp)
+        emap = carver.calc_energy(vietslice)
+        funcs = SeamFuncsAI()
+        pdb.set_trace()
+        coordspath = funcs.minimum_seam(vietslice, emap)
+        pdb.set_trace()
 
     def test_seammarker_minimum_seam_emap_matrix(self):
         "tests the minimum seam function of pointcarver"

@@ -293,7 +293,32 @@ class SeamFuncsAI(SeamFuncs):
             # print('path cost: ', str(pcost))
         return pcost is not None
 
-    def search_best_path(self, img: np.ndarray):
+    def moveGreedy(self, moveDirection: str,
+                   fromRow: int, fromColumn: int,
+                   img: np.ndarray):
+        "move greedy in given direction until one hits a point with energy"
+        pixelval = img[fromRow, fromColumn]
+        pixelval = np.sum(pixelval, dtype=np.int)
+        row = fromRow
+        col = fromColumn
+        rownb = img.shape[0]
+        colnb = img.shape[1]
+        while self.checkLimit(currentRow=row,
+                              currentColumn=col,
+                              rownb=rownb,
+                              colnb=colnb) and pixelval == 0:
+            row, col = self.moveFromCoordinate(moveDirection,
+                                               currentRow=row,
+                                               currentColumn=col)
+            pixelval = img[row, col]
+            pixelval = np.sum(pixelval, dtype=np.int)
+        #
+        return row, col
+
+    def search_best_path(self, img: np.ndarray,
+                         fromRow: int,
+                         fromColumn: int,
+                         goals: [(int, int)]):
         """
         Search best path for marking the seam
 
@@ -303,8 +328,8 @@ class SeamFuncsAI(SeamFuncs):
         explored = set()
         frontier = []
         actions = ["down",
-                   # "left",
-                   # "right",
+                   "left",
+                   "right",
                    "leftDown",
                    "rightDown"
                    ]

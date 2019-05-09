@@ -71,6 +71,18 @@ def assertCond(var, cond: bool, printType=True):
     else:
         assert cond, 'variable value: {0}'.format(var)
 
+def normalizeImageVals(img: np.ndarray):
+    ""
+    r, c = img.shape[:2]
+    flatim = img.reshape((-1))
+    #
+    normImg = np.interp(flatim,
+                        (flatim.min(), flatim.max()),
+                        (0, 255),
+                        )
+    normImg = normImg.astype(np.uint8)
+    normImg = normImg.reshape((r, c))
+    return normImg
 
 # Debug related
 

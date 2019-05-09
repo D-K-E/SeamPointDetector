@@ -7,12 +7,18 @@
 
 import numpy as np  # array/matrix manipulation
 import scipy.ndimage as nd  # operate easily on image matrices
+import operator
 import pdb
 
 
 class SeamFuncs:
     def __init__(self):
         self.mark_color = [0, 255, 0]
+        self.ops = {'>': operator.gt,
+                    '<': operator.lt,
+                    '>=': operator.ge,
+                    '<=': operator.le,
+                    '==': operator.eq}
 
     def calc_energy(self,
                     img: np.ndarray([], dtype=np.uint8)):
@@ -129,7 +135,7 @@ class SeamFuncsAI(SeamFuncs):
     "Seam funcs ai"
 
     def __init__(self):
-        self.mark_color = [0, 255, 0]
+        super().__init__()
         self.pathCost = 0
         self.path = []
         self.frontiers = []
@@ -198,6 +204,63 @@ class SeamFuncsAI(SeamFuncs):
             row, column = self.goRightDown(currentRow,
                                            currentColumn)
         return row, column
+
+    def moveOppositeDirection(self, moveDirection: str,
+                              currentRow: int,
+                              currentColumn: int):
+        "Move opposite direction"
+        if moveDirection == "up":
+            row, column = self.goDown(currentRow,
+                                      currentColumn)
+        elif moveDirection == "down":
+            row, column = self.goUp(currentRow,
+                                    currentColumn)
+        elif moveDirection == "left":
+            row, column = self.goRight(currentRow,
+                                       currentColumn)
+        elif moveDirection == "right":
+            row, column = self.goLeft(currentRow,
+                                      currentColumn)
+        elif moveDirection == "leftUp":
+            row, column = self.goRightDown(currentRow,
+                                           currentColumn)
+        elif moveDirection == "leftDown":
+            row, column = self.goRightUp(currentRow,
+                                         currentColumn)
+        elif moveDirection == "rightUp":
+            row, column = self.goLeftDown(currentRow,
+                                          currentColumn)
+        elif moveDirection == "rightDown":
+            row, column = self.goLeftUp(currentRow,
+                                        currentColumn)
+        return row, column
+
+    def getZeroZones(self, img: np.ndarray):
+        "Get the indices of zeros in image"
+        return self.getValZones(img, 0, "==")
+
+    def getInferior2MeanZones(self, img: np.ndarray):
+        "Get the indices of values inferior to mean value in image"
+        meanval = img.mean()
+        meanval = int(meanval)
+        return self.getValZones(img, meanval, '<')
+
+    def getValZones(self, img: np.ndarray, val: int, op: str):
+        "Get indices of val in image"
+        row, col = img.shape[:2]
+        coords = [[[r, c] for c in range(col)] for r in range(row)]
+        coordarr = np.array(coords, dtype=np.int)
+
+        if len(img.shape) > 2:
+            raise ValueError("Image has more than one color channel, change it"
+                             "to gray scale")
+        zones = np.empty((img.shape[0], img.shape[1], 3), dtype=np.int)
+        zones[:, :, 0] = img.copy()
+        zones[:, :, 1:] = coordarr
+        zones = zones.reshape((-1, 3))
+        zerovals = self.ops[op](zones[:, 0], val)
+        zones = zones[zerovals, :]
+        return zones
 
     def testGoalCoordinate(self,
                            currentRow: int,
@@ -303,6 +366,7 @@ class SeamFuncsAI(SeamFuncs):
         col = fromColumn
         rownb = img.shape[0]
         colnb = img.shape[1]
+        stepval = 0
         while self.checkLimit(currentRow=row,
                               currentColumn=col,
                               rownb=rownb,
@@ -312,13 +376,89 @@ class SeamFuncsAI(SeamFuncs):
                                                currentColumn=col)
             pixelval = img[row, col]
             pixelval = np.sum(pixelval, dtype=np.int)
+            stepval += 1
+        #
+        return row, col, stepval
+
+    def moveGreedy_proc(self, moveDirection: str, img: np.ndarray,
+                        row: int, col: int):
+        "Move greedy in given direction until one hits a point with energy"
+        return self.moveGreedy(moveDirection, img, row, col)
+
+    def jumpSteps(self, moveDirection: str, img: np.ndarray,
+                  fromRow: int, fromColumn: int, stepval: int):
+        "Jump in the direction given"
+        row, col = fromRow, fromColumn
+        rownb, colnb = img.shape[:2]
+        for step in range(stepval):
+            row, col = self.moveFromCoordinate(moveDirection,
+                                               currentRow=row,
+                                               currentColumn=col)
         #
         return row, col
+
+    def jumpSteps_proc(self, moveDirection: str,
+                       img: np.ndarray,
+                       row: int, col: int, stepval: int):
+        "Jump steps but applied as procedure"
+        return self.jumpSteps(moveDirection,
+                              img,
+                              fromRow=row,
+                              fromColumn=col,
+                              stepval=stepval)
+
+    def getVerticalMoveZone(self, zoneCoordinates: np.ndarray):
+        """
+        Group zone coordinates for moving vertical
+
+        Our approach is pretty simple.
+        Vertical movement means moving in the same column,
+        and incrementing row values.
+        First we find unique column values in the zone.
+        If we can move vertically than we should have multiple
+        row values attested for the same column.
+
+        Once we have the unique column values and the count for 
+        each of the values we skip those that have a count less than 2
+
+        Then for each unique column value we stock row values associated
+        with it. Then we take the difference between these row values
+        to see whether they are consecutive or not.
+        """
+        # row, column in zoneCoordinates
+        assert zoneCoordinates.shape[1] == 2
+        columns = zoneCoordinates[:, 1]
+        uniqueCols, indx, counts = np.unique(columns, return_index=True, 
+                                     return_counts=True)
+        for c, col in enumerate(uniqueCols):
+            count = counts[c]
+            if count <= 1:
+                continue
+            coords = zoneCoordinates.copy()
+            boolindx = coords[:, 1] == col
+            coords = coords[:, boolindx]
+            rows = coords[:, 0]
+            rowcp = rows.copy()
+            rowdiff = np.ediff1d(rowcp)  # (n+1 - n), (n - n-1), ...
+            indices = np.array(list(range(rowdiff.shape[0])))
+            rowIndices = np.zeros((rowdiff.shape[0], 2))
+            rowIndices[:, 0] = rowdiff
+            rowIndices[:, 1] = indices
+            consecutiveMark = rowIndices[:, 0] == 1
+            rowIndices = rowIndices[consecutiveMark, :]
+            indices = np.zeros_like(rowIndices[:, 1])
+            indices += rowIndices[:, 1]
+            indices = indices + 1
+            # see so for this there are apparently more efficient 
+            # implementations for finding indices of consecutive elements
+            # in ndarray, even for consecutive zeros etc.
+
 
     def search_best_path(self, img: np.ndarray,
                          fromRow: int,
                          fromColumn: int,
-                         goals: [(int, int)]):
+                         goals: [(int, int)]
+                         ):
         """
         Search best path for marking the seam
 
@@ -410,7 +550,6 @@ class SeamFuncsAI(SeamFuncs):
                 M[i, j] += min_energy
 
         return M, backtrack
-
 
     def minimum_seam(self,
                      img: np.ndarray([], dtype=np.uint8),

@@ -6,6 +6,7 @@
 from pointdetector.seammarker.seammarker.seammarker import (SeamMarker,
                                                             SeamFuncsAI)
 from pointdetector.seammarker.seammarker.utils import shapeCoordinate
+from pointdetector.seammarker.seammarker.utils import normalizeImageVals
 
 
 from PIL import Image, ImageQt, ImageOps
@@ -122,8 +123,8 @@ def drawCoordinate(img: np.ndarray,
     return imcp
 
 
-class PointCarverTest(unittest.TestCase):
-    "Test point carver"
+class SeamMarkerTest(unittest.TestCase):
+    "Test Seam carver"
 
     def setUp(self):
         "set up the pointcarver class"
@@ -202,6 +203,12 @@ class PointCarverTest(unittest.TestCase):
             self.npdir,
             "matchedMarkCoordPair{0}ColSliceTrueDown.npy"
         )
+        self.GEN_ZERO_ZONE_MAT = False
+        self.zero_zone_mat_path = os.path.join(self.npdir,
+                                               "vietSliceZeroZone.npy")
+        self.GEN_MEAN_INF_ZONE_MAT = False
+        self.mean_inf_zone_mat_path = os.path.join(self.npdir,
+                                                   "vietSliceMeanInf.npy")
 
     def generateSliceMatrix(self):
         if self.GEN_SLICE_MAT:
@@ -240,6 +247,31 @@ class PointCarverTest(unittest.TestCase):
             )
             np.save(firstPath, markCoord1)
             np.save(secondPath, markCoord2)
+
+    def generateZeroZoneMatrix(self):
+        if self.GEN_ZERO_ZONE_MAT:
+            vietImcp = self.loadImageCol()
+            vietslice = vietImcp[:, 550:600]
+            carver = SeamMarker(img=vietImcp)
+            emap = carver.calc_energy(vietslice)
+            normalized = normalizeImageVals(emap.copy())
+            # vietEmap = ImageOps.grayscale(Image.fromarray(emap))
+            funcs = SeamFuncsAI()
+            zones = funcs.getZeroZones(normalized)
+            np.save(self.zero_zone_mat_path, zones)
+
+    def generateInferior2MeanMatrix(self):
+        if self.GEN_MEAN_INF_ZONE_MAT:
+            vietImcp = self.loadImageCol()
+            vietslice = vietImcp[:, 550:600]
+            carver = SeamMarker(img=vietImcp)
+            emap = carver.calc_energy(vietslice)
+            normalized = normalizeImageVals(emap.copy())
+            # vietEmap = ImageOps.grayscale(Image.fromarray(emap))
+            funcs = SeamFuncsAI()
+            zones = funcs.getInferior2MeanZones(normalized)
+            np.save(self.mean_inf_zone_mat_path, zones)
+
 
     def generateSlicedImage(self):
         if self.GEN_SLICE_IMAGE:
@@ -473,9 +505,37 @@ class PointCarverTest(unittest.TestCase):
         carver = SeamMarker(img=vietImcp)
         emap = carver.calc_energy(vietslice)
         funcs = SeamFuncsAI()
-        pdb.set_trace()
-        coordspath = funcs.minimum_seam(vietslice, emap)
-        pdb.set_trace()
+        # pdb.set_trace()
+        # coordspath = funcs.minimum_seam(vietslice, emap)
+        # pdb.set_trace()
+
+    def test_seammarker_getZeroZones(self):
+        vietImcp = self.loadImageCol()
+        vietslice = vietImcp[:, 550:600]
+        carver = SeamMarker(img=vietImcp)
+        emap = carver.calc_energy(vietslice)
+        normalized = normalizeImageVals(emap.copy())
+        # vietEmap = ImageOps.grayscale(Image.fromarray(emap))
+        funcs = SeamFuncsAI()
+        # pdb.set_trace()
+        zones = funcs.getZeroZones(normalized)
+        compmat = np.load(self.zero_zone_mat_path)
+        self.compareArrays(zones, compmat,
+                           "Zero indices are not equivalent")
+
+    def test_seammarker_getInferior2MeanZones(self):
+        vietImcp = self.loadImageCol()
+        vietslice = vietImcp[:, 550:600]
+        carver = SeamMarker(img=vietImcp)
+        emap = carver.calc_energy(vietslice)
+        normalized = normalizeImageVals(emap.copy())
+        # vietEmap = ImageOps.grayscale(Image.fromarray(emap))
+        funcs = SeamFuncsAI()
+        # pdb.set_trace()
+        zones = funcs.getInferior2MeanZones(normalized)
+        compmat = np.load(self.mean_inf_zone_mat_path)
+        self.compareArrays(zones, compmat,
+                           "Mean indices are not equivalent")
 
     def test_seammarker_minimum_seam_emap_matrix(self):
         "tests the minimum seam function of pointcarver"

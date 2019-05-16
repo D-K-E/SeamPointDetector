@@ -9,6 +9,8 @@ import numpy as np  # array/matrix manipulation
 import scipy.ndimage as nd  # operate easily on image matrices
 import operator
 import pdb
+from seammarker.utils import getConsecutive1D
+from seammarker.utils import getConsecutive2D
 
 
 class SeamFuncs:
@@ -407,9 +409,62 @@ class SeamFuncsAI(SeamFuncs):
                               fromColumn=col,
                               stepval=stepval)
 
-    def getVerticalMoveZone(self, zoneCoordinates: np.ndarray):
+    def getMoveOrientation(self, moveDirection: str) -> str:
+        "Decide if the move is horizontal/vertical/diagonal"
+        if moveDirection == "left":
+            return "horizontal"
+        elif moveDirection == "right":
+            return "horizontal"
+        elif moveDirection == "up":
+            return "vertical"
+        elif moveDirection == "down":
+            return "vertical"
+        elif moveDirection == "leftDown":
+            return "diagonal-r"
+        elif moveDirection == "leftUp":
+            return "diagonal-l"
+        elif moveDirection == "rightDown":
+            return "diagonal-l"
+        elif moveDirection == "rightUp":
+            return "diagonal-r"
+
+    def getVHDMoveZone(self,
+                       zoneCoordinates: np.ndarray,
+                       moveDirection: str):
         """
-        Group zone coordinates for moving vertical
+        Group zone coordinates for moving vertical/horizontal/diagonal
+
+        Our approach is pretty simple.
+        Vertical movement means moving in the same column,
+        and incrementing row values.
+        Horizontal movement means moving in the same row,
+        and incrementing column values.
+        Diagonal movement means moving in row and column 
+        at the same time
+
+        First we find unique column values in the zone.
+        If we can move vertically than we should have multiple
+        row values attested for the same column.
+
+        Once we have the unique column values and the count for 
+        each of the values we skip those that have a count less than 2
+
+        Then for each unique column value we stock row values associated
+        with it. Then we take the difference between these row values
+        to see whether they are consecutive or not.
+
+        """
+        direction = self.getMoveOrientation(moveDirection)
+        consecutiveVals = getConsecutive2D(data=zoneCoordinates,
+                                           direction=direction,
+                                           only_index=False)
+        return consecutiveVals
+
+    def getVHMoveZone(self,
+                      zoneCoordinates: np.ndarray,
+                      vertical=True):
+        """
+        Group zone coordinates for moving vertical/horizontal
 
         Our approach is pretty simple.
         Vertical movement means moving in the same column,
@@ -424,34 +479,71 @@ class SeamFuncsAI(SeamFuncs):
         Then for each unique column value we stock row values associated
         with it. Then we take the difference between these row values
         to see whether they are consecutive or not.
+
         """
-        # row, column in zoneCoordinates
         assert zoneCoordinates.shape[1] == 2
-        columns = zoneCoordinates[:, 1]
-        uniqueCols, indx, counts = np.unique(columns, return_index=True, 
-                                     return_counts=True)
-        for c, col in enumerate(uniqueCols):
+        if vertical is True:
+            axis = 1
+            otherAxis = 0
+            top2bottom = True
+            left2right = False
+        else:
+            axis = 0
+            otherAxis = 1
+            top2bottom = False
+            left2right = True
+        rowOrCol = getConsecutive2D(data=zoneCoordinates,
+                                    stepsize=1,
+                                    only_index=False,
+                                    leftToRight=left2right,
+                                    topToBottom=top2bottom)
+        uniques, counts = np.unique(rowOrCol, return_counts=True)
+        rowColArrays = {}
+        for c, rowCol in enumerate(uniques):
             count = counts[c]
             if count <= 1:
                 continue
             coords = zoneCoordinates.copy()
-            boolindx = coords[:, 1] == col
-            coords = coords[:, boolindx]
-            rows = coords[:, 0]
-            rowcp = rows.copy()
-            rowdiff = np.ediff1d(rowcp)  # (n+1 - n), (n - n-1), ...
-            indices = np.array(list(range(rowdiff.shape[0])))
-            rowIndices = np.zeros((rowdiff.shape[0], 2))
-            rowIndices[:, 0] = rowdiff
-            rowIndices[:, 1] = indices
-            consecutiveMark = rowIndices[:, 0] == 1
-            rowIndices = rowIndices[consecutiveMark, :]
-            indices = np.zeros_like(rowIndices[:, 1])
-            indices += rowIndices[:, 1]
-            indices = indices + 1
-            # see so for this there are apparently more efficient 
-            # implementations for finding indices of consecutive elements
-            # in ndarray, even for consecutive zeros etc.
+            boolindx = coords[:, axis] == rowCol
+            coords = coords[boolindx, :]
+            others = coords[:, otherAxis]
+            othercp = others.copy()
+            consecutives = getConsecutive1D(othercp)
+            rowColArrays[rowCol] = consecutives
+        return rowColArrays
+
+    def getVerticalMoveZone(self, zoneCoordinates: np.ndarray):
+        """
+        Get vertical move zone
+        """
+        return self.getVHMoveZone(zoneCoordinates, axis=1)
+
+    def getHorizontalMoveZone(self, zoneCoordinates: np.ndarray):
+        """
+        Get horizontal move zone
+        """
+        return self.getVHMoveZone(zoneCoordinates, axis=0)
+
+    def getDiagonalMoveZone(self,
+                            zoneCoordinates: np.ndarray,
+                            leftToRight=True):
+        "Get diagonal move zone"
+        assert zoneCoordinates.ndim == 2
+        rowColArrays = {}
+        if leftToRight:
+            consecutiveVals, indices = getDiagonalPoints(
+                zoneCoordinates,
+                only_index=False,
+                leftToRight=leftToRight)
+        else:
+            consecutiveVals, indices = getDiagonalPoints(
+                zoneCoordinates,
+                only_index=False,
+                leftToRight=leftToRight
+            )
+        #
+        for i in range(zoneCoordinates.shape[0]):
+            rowcol = zoneCoordinates[i, :]
 
 
     def search_best_path(self, img: np.ndarray,

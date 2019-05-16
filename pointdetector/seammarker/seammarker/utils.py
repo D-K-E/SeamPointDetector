@@ -5,6 +5,60 @@ import json
 # From stack overflow
 
 
+def getConsecutive1D(data: np.ndarray,
+                     stepsize=1,
+                     only_index=False):
+    "Get consecutive values from 1d array"
+    assert data.ndim == 1
+    indices = np.argwhere((data[1:] - data[:-1]) != stepsize)
+    indices = indices.T[0] + 1  # include the range
+    if only_index is False:
+        subarrays = np.split(data, indices, axis=0)
+        return subarrays, indices
+    else:
+        return indices
+
+
+def getDiffDirection(stepsize: int,
+                     direction: str):
+    "create 2d diff vec using stepsize"
+    direction = direction.lower()
+    assert direction in ["vertical", "horizontal",
+                         "diagonal-l", "diagonal-r"]
+    if direction == "vertical":
+        rowdiff, coldiff = stepsize, 0
+    elif direction == "horizontal":
+        rowdiff, coldiff = 0, stepsize
+    elif direction == "diagonal-l":
+        rowdiff, coldiff = stepsize, stepsize
+    elif direction == "diagonal-r":
+        rowdiff, coldiff = stepsize, -stepsize
+    return [rowdiff, coldiff]
+
+
+def getConsecutive2D(data: np.ndarray,
+                     direction: str,
+                     stepsize=1,
+                     only_index=False):
+    "Get consecutive values in horizontal vertical and diagonal directions"
+    assert data.shape[1] == 2
+    diffval = getDiffDirection(stepsize, direction)
+    diffarr = data[1:] - data[:-1]
+    indices = np.argwhere(diffarr != diffval)
+    indices = indices.T
+    indices = indices[0] + 1
+    if only_index:
+        return indices
+    else:
+        splitdata = np.split(data, indices, axis=0)
+        splitdata = [
+            data for data in splitdata if data.size > 0 and data.shape[0] > 1
+        ]
+        return splitdata, indices
+
+# End stack overflow
+
+
 def saveJson(path, obj):
     "Save json"
     with open(path, 'w',
@@ -24,24 +78,6 @@ def readImage(path: str) -> np.ndarray:
     "Read image from the path"
     pilim = Image.open(path)
     return np.array(pilim)
-
-
-def parsePoints(pointstr: str) -> list:
-    "Parse string which contains points into a point list"
-    # the points are y1, x1; y2, x2; y3, x3;
-    points = pointstr.splitlines()
-    points = [
-        [int(p.strip()) for p in po.split(',') if p] for po in points if po
-    ]
-    return points
-
-
-def readPoints(path):
-    "Read points from given path"
-    with open('r', encoding="utf-8") as f:
-        pointstr = f.read()
-    points = parsePoints(pointstr)
-    return points
 
 
 def shapeCoordinate(coord: np.ndarray):
@@ -70,6 +106,7 @@ def assertCond(var, cond: bool, printType=True):
                                                                  type(var))
     else:
         assert cond, 'variable value: {0}'.format(var)
+
 
 def normalizeImageVals(img: np.ndarray):
     ""

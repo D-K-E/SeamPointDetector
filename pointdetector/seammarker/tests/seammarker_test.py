@@ -1,12 +1,11 @@
 # Author: Kaan Eraslan
 # License: see, LICENSE
 # No warranties, see LICENSE
-# Tests the main functionality of point carver
+# Tests the core functionality of seam marker
 
-from pointdetector.seammarker.seammarker.seammarker import (SeamMarker,
-                                                            SeamFuncsAI)
-from pointdetector.seammarker.seammarker.utils import shapeCoordinate
-from pointdetector.seammarker.seammarker.utils import normalizeImageVals
+from seammarker.seammarker import SeamMarker, SeamFuncsAI
+from seammarker.utils import shapeCoordinate
+from seammarker.utils import normalizeImageVals
 
 
 from PIL import Image, ImageQt, ImageOps
@@ -272,7 +271,6 @@ class SeamMarkerTest(unittest.TestCase):
             zones = funcs.getInferior2MeanZones(normalized)
             np.save(self.mean_inf_zone_mat_path, zones)
 
-
     def generateSlicedImage(self):
         if self.GEN_SLICE_IMAGE:
             viet = self.loadImageCol()
@@ -536,6 +534,13 @@ class SeamMarkerTest(unittest.TestCase):
         compmat = np.load(self.mean_inf_zone_mat_path)
         self.compareArrays(zones, compmat,
                            "Mean indices are not equivalent")
+
+    def test_seammarker_getVerticalMoveZone(self):
+        "get vertical move zone"
+        zones = np.load(self.zero_zone_mat_path)
+        zones = zones[:, 1:]
+        funcs = SeamFuncsAI()
+        vmoves = funcs.getVerticalMoveZone(zones)
 
     def test_seammarker_minimum_seam_emap_matrix(self):
         "tests the minimum seam function of pointcarver"

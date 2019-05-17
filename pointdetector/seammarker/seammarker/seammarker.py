@@ -141,6 +141,21 @@ class SeamFuncsAI(SeamFuncs):
         self.pathCost = 0
         self.path = []
         self.frontiers = []
+        self.moves = ["right", "left", "up", "down", "leftUp",
+                      "leftDown", "rightDown", "rightUp"
+                      ]
+        self.moveOps = {
+            "right": self.goRight, "left": self.goLeft, "down": self.goDown,
+            "up": self.goUp, "leftDown": self.goLeftDown,
+            "leftUp": self.goLeftUp, "rightDown": self.goRightDown,
+            "rightUp": self.goRightUp
+        }
+        self.moveBackOps = {
+            "left": self.goRight, "right": self.goLeft,
+            "up": self.goDown, "down": self.goUp,
+            "rightUp": self.goLeftDown, "rightDown": self.goLeftUp,
+            "leftUp": self.goRightDown, "leftDown": self.goRightUp
+        }
 
     def goUp(self, currentRow: int,
              currentColumn: int):
@@ -177,66 +192,6 @@ class SeamFuncsAI(SeamFuncs):
         "go left up"
         return currentRow + 1, currentColumn + 1
 
-    def moveFromCoordinate(self, moveDirection: str,
-                           currentRow: int,
-                           currentColumn: int):
-        "Move from direction"
-        if moveDirection == "up":
-            row, column = self.goUp(currentRow,
-                                    currentColumn)
-        elif moveDirection == "down":
-            row, column = self.goDown(currentRow,
-                                      currentColumn)
-        elif moveDirection == "left":
-            row, column = self.goLeft(currentRow,
-                                      currentColumn)
-        elif moveDirection == "right":
-            row, column = self.goRight(currentRow,
-                                       currentColumn)
-        elif moveDirection == "leftUp":
-            row, column = self.goLeftUp(currentRow,
-                                        currentColumn)
-        elif moveDirection == "leftDown":
-            row, column = self.goLeftDown(currentRow,
-                                          currentColumn)
-        elif moveDirection == "rightUp":
-            row, column = self.goRightUp(currentRow,
-                                         currentColumn)
-        elif moveDirection == "rightDown":
-            row, column = self.goRightDown(currentRow,
-                                           currentColumn)
-        return row, column
-
-    def moveOppositeDirection(self, moveDirection: str,
-                              currentRow: int,
-                              currentColumn: int):
-        "Move opposite direction"
-        if moveDirection == "up":
-            row, column = self.goDown(currentRow,
-                                      currentColumn)
-        elif moveDirection == "down":
-            row, column = self.goUp(currentRow,
-                                    currentColumn)
-        elif moveDirection == "left":
-            row, column = self.goRight(currentRow,
-                                       currentColumn)
-        elif moveDirection == "right":
-            row, column = self.goLeft(currentRow,
-                                      currentColumn)
-        elif moveDirection == "leftUp":
-            row, column = self.goRightDown(currentRow,
-                                           currentColumn)
-        elif moveDirection == "leftDown":
-            row, column = self.goRightUp(currentRow,
-                                         currentColumn)
-        elif moveDirection == "rightUp":
-            row, column = self.goLeftDown(currentRow,
-                                          currentColumn)
-        elif moveDirection == "rightDown":
-            row, column = self.goLeftUp(currentRow,
-                                        currentColumn)
-        return row, column
-
     def getZeroZones(self, img: np.ndarray):
         "Get the indices of zeros in image"
         return self.getValZones(img, 0, "==")
@@ -247,11 +202,16 @@ class SeamFuncsAI(SeamFuncs):
         meanval = int(meanval)
         return self.getValZones(img, meanval, '<')
 
-    def getValZones(self, img: np.ndarray, val: int, op: str):
-        "Get indices of val in image"
+    def getImageCoordinateArray(self, img: np.ndarray) -> np.ndarray:
+        "Get zone coordinates array"
         row, col = img.shape[:2]
         coords = [[[r, c] for c in range(col)] for r in range(row)]
         coordarr = np.array(coords, dtype=np.int)
+        return coordarr
+
+    def getValZones(self, img: np.ndarray, val: int, op: str):
+        "Get indices of val in image"
+        coordarr = self.getImageCoordinateArray(img)
 
         if len(img.shape) > 2:
             raise ValueError("Image has more than one color channel, change it"
@@ -387,27 +347,23 @@ class SeamFuncsAI(SeamFuncs):
         "Move greedy in given direction until one hits a point with energy"
         return self.moveGreedy(moveDirection, img, row, col)
 
-    def jumpSteps(self, moveDirection: str, img: np.ndarray,
-                  fromRow: int, fromColumn: int, stepval: int):
+    def jump2PointWithCost(self, moveDirection: str, img: np.ndarray,
+                           fromRow: int, fromColumn: int,
+                           toRow: int, toColumn: int):
         "Jump in the direction given"
         row, col = fromRow, fromColumn
-        rownb, colnb = img.shape[:2]
-        for step in range(stepval):
-            row, col = self.moveFromCoordinate(moveDirection,
-                                               currentRow=row,
-                                               currentColumn=col)
+        stepcost = 0
+        while row != toRow and col != toColumn:
+            oldrow, oldcol = row, col
+            row, col = self.moveOps[moveDirection](oldrow, oldcol)
+            scost = self.getStepCost(currentRow=oldrow,
+                                     currentColumn=oldcol,
+                                     nextRow=row,
+                                     nextColumn=col,
+                                     img=img)
+            stepcost += scost
         #
-        return row, col
-
-    def jumpSteps_proc(self, moveDirection: str,
-                       img: np.ndarray,
-                       row: int, col: int, stepval: int):
-        "Jump steps but applied as procedure"
-        return self.jumpSteps(moveDirection,
-                              img,
-                              fromRow=row,
-                              fromColumn=col,
-                              stepval=stepval)
+        return row, col, stepcost
 
     def getMoveOrientation(self, moveDirection: str) -> str:
         "Decide if the move is horizontal/vertical/diagonal"
@@ -430,7 +386,7 @@ class SeamFuncsAI(SeamFuncs):
 
     def getVHDMoveZone(self,
                        zoneCoordinates: np.ndarray,
-                       moveDirection: str):
+                       moveDirection: str) -> []:
         """
         Group zone coordinates for moving vertical/horizontal/diagonal
 
@@ -460,91 +416,92 @@ class SeamFuncsAI(SeamFuncs):
                                            only_index=False)
         return consecutiveVals
 
-    def getVHMoveZone(self,
-                      zoneCoordinates: np.ndarray,
-                      vertical=True):
-        """
-        Group zone coordinates for moving vertical/horizontal
+    def getMoveZonesFromValZone(self, valZone: np.ndarray) -> dict:
+        "Get move zone for image"
+        assert valZone.shape[1] == 2
+        zones = {key: [] for key in self.moves}
+        for moveDir in self.moves:
+            moveZone = self.getVHDMoveZone(valZone,
+                                           moveDir)
+            zoneMat = np.concatenate(moveZone, axis=0)
+            zones[moveDir] = {"zones": moveZone, "allZones": zoneMat}
+        return zones
 
-        Our approach is pretty simple.
-        Vertical movement means moving in the same column,
-        and incrementing row values.
-        First we find unique column values in the zone.
-        If we can move vertically than we should have multiple
-        row values attested for the same column.
+    def getLeastDistancePointFromZone(self,
+                                      zone: np.ndarray,
+                                      finalRow: int,
+                                      finalColumn: int):
+        "Get the point that is closest to goal row/column in the zone"
+        zoneRow = zone[:, 0]
+        zoneCol = zone[:, 1]
+        rowsqr = (zoneRow - finalRow) ** 2
+        colsqr = (zoneCol - finalColumn) ** 2
+        distance = np.sqrt(rowsqr + colsqr)
+        minDistanceArg = np.argmin(distance)
+        minDistance = distance.min()
+        row, col = zone[minDistanceArg]
+        return row, col, minDistance
 
-        Once we have the unique column values and the count for 
-        each of the values we skip those that have a count less than 2
-
-        Then for each unique column value we stock row values associated
-        with it. Then we take the difference between these row values
-        to see whether they are consecutive or not.
-
-        """
-        assert zoneCoordinates.shape[1] == 2
-        if vertical is True:
-            axis = 1
-            otherAxis = 0
-            top2bottom = True
-            left2right = False
-        else:
-            axis = 0
-            otherAxis = 1
-            top2bottom = False
-            left2right = True
-        rowOrCol = getConsecutive2D(data=zoneCoordinates,
-                                    stepsize=1,
-                                    only_index=False,
-                                    leftToRight=left2right,
-                                    topToBottom=top2bottom)
-        uniques, counts = np.unique(rowOrCol, return_counts=True)
-        rowColArrays = {}
-        for c, rowCol in enumerate(uniques):
-            count = counts[c]
-            if count <= 1:
-                continue
-            coords = zoneCoordinates.copy()
-            boolindx = coords[:, axis] == rowCol
-            coords = coords[boolindx, :]
-            others = coords[:, otherAxis]
-            othercp = others.copy()
-            consecutives = getConsecutive1D(othercp)
-            rowColArrays[rowCol] = consecutives
-        return rowColArrays
-
-    def getVerticalMoveZone(self, zoneCoordinates: np.ndarray):
-        """
-        Get vertical move zone
-        """
-        return self.getVHMoveZone(zoneCoordinates, axis=1)
-
-    def getHorizontalMoveZone(self, zoneCoordinates: np.ndarray):
-        """
-        Get horizontal move zone
-        """
-        return self.getVHMoveZone(zoneCoordinates, axis=0)
-
-    def getDiagonalMoveZone(self,
-                            zoneCoordinates: np.ndarray,
-                            leftToRight=True):
-        "Get diagonal move zone"
-        assert zoneCoordinates.ndim == 2
-        rowColArrays = {}
-        if leftToRight:
-            consecutiveVals, indices = getDiagonalPoints(
-                zoneCoordinates,
-                only_index=False,
-                leftToRight=leftToRight)
-        else:
-            consecutiveVals, indices = getDiagonalPoints(
-                zoneCoordinates,
-                only_index=False,
-                leftToRight=leftToRight
+    def getLeastDistance2GoalsPointFromZone(self,
+                                            zone: np.ndarray,
+                                            goals: [(int, int)]):
+        "Apply least distance point from zone to goal points"
+        zonePoints = []
+        for goal in goals:
+            row, col = goal
+            zoneRow, zoneCol, distance = self.getLeastDistancePointFromZone(
+                zone=zone,
+                finalRow=row,
+                finalColumn=col
             )
+            zonePoints.append((zoneRow, zoneCol, distance))
         #
-        for i in range(zoneCoordinates.shape[0]):
-            rowcol = zoneCoordinates[i, :]
+        zonePoints.sort(key=lambda x: x[2])
+        return zonePoints.pop()
 
+    def getLeastDistanceMoveDirection(self,
+                                      fromRow: int,
+                                      fromColumn: int,
+                                      toRow: int,
+                                      toColumn: int) -> str:
+        "Get move direction from row/column to row/column"
+        rowdiff = toRow - fromRow
+        coldiff = toColumn - fromColumn
+        if rowdiff > 0 and coldiff == 0:
+            return "down"
+        elif rowdiff < 0 and coldiff == 0:
+            return "up"
+        elif rowdiff == 0 and coldiff > 0:
+            return "right"
+        elif rowdiff == 0 and coldiff < 0:
+            return "left"
+        elif rowdiff > 0 and coldiff > 0:
+            return "rightDown"
+        elif rowdiff > 0 and coldiff < 0:
+            return "leftDown"
+        elif rowdiff < 0 and coldiff > 0:
+            return "rightUp"
+        elif rowdiff < 0 and coldiff < 0:
+            return "leftUp"
+
+    def checkPointInCoordZone(self, coordzone: np.ndarray,
+                              currentRow: int, currentColumn: int):
+        "Check if a coordinate zone contain the point"
+        arr = [currentRow, currentColumn]
+        return any(np.equal(coordzone, arr).all(axis=1))
+
+    def getPointZone(self, zones: [np.ndarray],
+                     currentRow: int,
+                     currentColumn: int):
+        "Get the zone that includes the currentColumn and row"
+        assert isinstance(zones, list)
+        arr = [currentRow, currentColumn]
+        pointZones = []
+        for zone in zones:
+            hasArray = any(np.equal(zone, arr).all(axis=1))
+            if hasArray:
+                pointZones.append(zone)
+        return pointZones
 
     def search_best_path(self, img: np.ndarray,
                          fromRow: int,
@@ -556,16 +513,85 @@ class SeamFuncsAI(SeamFuncs):
 
         The algorithm is mix between a*star path search
         with upper bound pruning implemented in availability function
+
+        Here is the algorithm steps:
+        1. Create an explored set containing explored states
+        2. Create a frontier containing explored nodes
+        3. Create pruning criterias for frontier
+        4. Obtain the indices of zero energy zones from the image
+        5. Regroup zero energy indices into moves so that each move 
+        is associated to a zone array.
+            5.1 Create zone array
+        A zone array contains 1 or multiple zones where a move can be done
+        with zero energy.
+        For example for any diagonal left to right movement we would have
+        zone array like:
+        [np.array([[0,1], [1, 2]]), np.array([[53, 54], [54, 55], [55, 56]])]
+        the array has 2 zones in it and it can be associated to moves
+        leftUp, rightDown
+            5.2 Create a zones matrix, which contains all the coordinates
+            of all the zones in a zone array
+
+        6. Create an initial state with row 0, column 0, cost 0 and empty path
+        7. Create goal states, which is basically arriving at the end of the
+        image
+        8. Add initial state to frontier
+        9. Loop until and empty frontier or until finding a path that attains
+        to any of the goal state.
+        Inside the loop:
+        10. Pop the last added state with its cost and path from the frontier
+        11. Add the state to its path
+        12. Add the state to explored states
+        13. Check if the current path attains a goal state, if it does
+        terminate the loop and return the path
+        14. Check if the last state is in zero energy zone: 
+            if it does
+            14.1 Check if zone matrix of a move contains the state
+                if not:
+                    quit from branch and proceed to step 15
+            14.2 Create minimalZoneMove list
+            14.3 for all zone matrices associated to a move
+                14.3.1 Obtain the zone that contains the state
+                14.3.2 Compute the closest point and its distance in 
+                       the zone to any of the goal states.
+                14.3.3 add the zone, closest point, goal state and move
+                       to minimalZoneMove list
+            14.4 Sort the minimalZoneMove list from shortest distance to
+                 longer distance
+            14.5 Filter the minimalZoneMove list for elements that contain
+            a distance longer than the shortest distance
+            14.6 Check if minimalZoneMove list contains more than 1 element
+                if it does:
+                14.6.1 create minimalZoneMove2 list
+                14.6.2 for each element of minimalZoneMove list
+                14.6.3 compute its goal state's distance with goal state in
+                       center
+                14.6.4 add new distance value along with element
+                       to minimalZoneMove2
+                14.6.5 filter minimalZoneMove2 list using the shortest new
+                       distance
+                14.6.6 check if minimalZoneMove2 list contains more than 1
+                       element
+                       if it does:
+                       use an external criteria to filter out all but a single
+                       value in it
+                14.6.7 remove newly computed distance from the element
+                14.6.8 assign minimalZoneMove2 to minimalZoneMove
+
+            14.7 Obtain from the only element of minimalZoneMove: zone, move, 
+                 closest point
+            14.8 Compute the step cost from the current state to the closest
+                 point of the move within the zone
+            14.9 Add points between the current state and the closest point
+                to the path, and increment the overall step cost
+            14.10 Add closest point, new step cost and path to frontier.
+            14.11 sort frontier by distance to goal states and overall step
+            cost of paths
+        15. Forall moves that are doable:
         """
         explored = set()
         frontier = []
-        actions = ["down",
-                   "left",
-                   "right",
-                   "leftDown",
-                   "rightDown"
-                   ]
-        total_possible_energy = 255 * img.shape[0] + 255 * img.shape[1]
+        total_possible_energy = 255 * img.shape[0]
         # possible_steps = img.shape[0] + img.shape[1]
         # total_possible_energy += possible_steps
         total_possible_energy = 255 * img.shape[0] * img.shape[1]
@@ -583,10 +609,9 @@ class SeamFuncsAI(SeamFuncs):
                                        goals=goals
                                        ):
                 return path_copy
-            for act in actions:
-                nextRow, nextCol = self.moveFromCoordinate(moveDirection=act,
-                                                           currentRow=row,
-                                                           currentColumn=col)
+            for act in self.moves:
+                nextRow, nextCol = self.moveOps[act](currentRow=row,
+                                                     currentColumn=col)
                 if self.checkLimit(currentRow=nextRow,
                                    currentColumn=nextCol,
                                    rownb=img.shape[0],

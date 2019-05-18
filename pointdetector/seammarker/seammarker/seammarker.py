@@ -257,18 +257,17 @@ class SeamFuncsAI(SeamFuncs):
         pixelsum = next_pixel_sum + current_pixel_sum
         return stepcost + pixelsum
 
-    def checkFrontier(self,
-                      currentRow: int,
-                      currentColumn: int,
-                      frontier: list):
+    def checkInFrontier(self,
+                        currentRow: int,
+                        currentColumn: int,
+                        frontier: list):
         "check if current row and column is in frontier"
-        checkval = False
         for row, col, step_cost, path in frontier:
             if (row, col) == (currentRow, currentColumn):
-                checkval = True
+                return True
                 # print('in frontier')
         #
-        return checkval
+        return False
 
     def getUpperBound(self, img: np.ndarray,
                       path: [(int, int)]):
@@ -280,12 +279,11 @@ class SeamFuncsAI(SeamFuncs):
         column extreme and row extreme
         """
         col_extrema = sorted(path, key=lambda x: x[1], reverse=True)
-        col_extrema = col_extrema[-1]
+        col_extrema = col_extrema.pop()
         col_extrema = np.array([255 for i in range(col_extrema[1])])
         colsum = np.sum(col_extrema, dtype=np.int)
         row_extrema = sorted(path, key=lambda x: x[0], reverse=True)
-        row_extrema = row_extrema[-1]
-        row_extrema = row_extrema[0] * 255
+        row_extrema = row_extrema.pop()
         row_extrema = np.array([255 for i in range(row_extrema[0])])
         rowsum = np.sum(row_extrema)
         return colsum + rowsum
@@ -293,30 +291,23 @@ class SeamFuncsAI(SeamFuncs):
     def getPathCost(self, img: np.ndarray,
                     path: [(int, int)]):
         ""
-        pcost = 0
+        path_energy = 0
         for p in path:
             pixelval = np.sum(img[p[0], p[1]], dtype=np.int)
-            pcost += pixelval
+            path_energy += pixelval
         #
-        upperBound = self.getUpperBound(img, path)
-        if pcost > upperBound:
-            return None
-        else:
-            return pcost
+        pathCost = path_energy + len(path)
+        return pathCost
 
     def checkAvailable(self, currentRow: int,
                        currentColumn: int,
                        path: [(int, int)],
+                       possible_energy: int,
                        img: np.ndarray):
         ""
-        pixelval = np.sum(img[currentRow, currentColumn],
-                          dtype=np.int)
-        pcost = 0
-        if pixelval > 0:
-            pcost = self.getPathCost(img=img, path=path)
-            self.pathCost = pcost
-            # print('path cost: ', str(pcost))
-        return pcost is not None
+        pathCost = self.getPathCost(img=img, path=path)
+        pathUpperBound = self.getUpperBound(img, path)
+        return pathCost < pathUpperBound and pathCost < possible_energy
 
     def moveGreedy(self, moveDirection: str,
                    fromRow: int, fromColumn: int,
@@ -353,6 +344,7 @@ class SeamFuncsAI(SeamFuncs):
         "Jump in the direction given"
         row, col = fromRow, fromColumn
         stepcost = 0
+        path = []
         while row != toRow and col != toColumn:
             oldrow, oldcol = row, col
             row, col = self.moveOps[moveDirection](oldrow, oldcol)
@@ -361,9 +353,10 @@ class SeamFuncsAI(SeamFuncs):
                                      nextRow=row,
                                      nextColumn=col,
                                      img=img)
+            path.append((oldrow, oldcol))
             stepcost += scost
         #
-        return row, col, stepcost
+        return row, col, stepcost, path
 
     def getMoveOrientation(self, moveDirection: str) -> str:
         "Decide if the move is horizontal/vertical/diagonal"
@@ -424,7 +417,7 @@ class SeamFuncsAI(SeamFuncs):
             moveZone = self.getVHDMoveZone(valZone,
                                            moveDir)
             zoneMat = np.concatenate(moveZone, axis=0)
-            zones[moveDir] = {"zones": moveZone, "allZones": zoneMat}
+            zones[moveDir] = {"zoneArray": moveZone, "zoneMatrix": zoneMat}
         return zones
 
     def getLeastDistancePointFromZone(self,
@@ -454,10 +447,10 @@ class SeamFuncsAI(SeamFuncs):
                 finalRow=row,
                 finalColumn=col
             )
-            zonePoints.append((zoneRow, zoneCol, distance))
+            zonePoints.append((zoneRow, zoneCol, distance, goal))
         #
         zonePoints.sort(key=lambda x: x[2])
-        return zonePoints.pop()
+        return zonePoints[0]
 
     def getLeastDistanceMoveDirection(self,
                                       fromRow: int,
@@ -490,23 +483,199 @@ class SeamFuncsAI(SeamFuncs):
         arr = [currentRow, currentColumn]
         return any(np.equal(coordzone, arr).all(axis=1))
 
-    def getPointZone(self, zones: [np.ndarray],
+    def populateMinimalMoveZone(self, moveZones: dict,
+                                currentRow: int,
+                                currentColumn: int,
+                                goals: [(int, int)]):
+        "populate minimal move zone list"
+        minimalZoneMove = []
+        for move, zoneMap in moveZones.items():
+            zoneMat = zoneMap['zoneMatrix']
+            if self.checkPointInCoordZone(coordzone=zoneMat,
+                                          currentRow=currentRow,
+                                          currentColumn=currentColumn):
+                continue
+            zoneArr = zoneMap['zoneArray']
+            containingZone = self.getPointZone(zoneArr, currentRow=currentRow,
+                                               currentColumn=currentColumn)
+            (closestRow,
+             closestColumn,
+             distance,
+             goal) = self.getLeastDistance2GoalsPointFromZone(
+                 zone=containingZone,
+                 goals=goals
+            )
+            minimalZoneMove.append((closestRow, closestColumn, move,
+                                    distance, goal))
+        #
+        return minimalZoneMove
+
+    def sortFrontier_proc(self, frontier: list, compareFn):
+        "Sort frontier using the compare function"
+        frontier.sort(key=compareFn, reverse=True)
+
+    def addNextStateWithCost2Frontier_proc(self, currentRow: int,
+                                           currentColumn: int,
+                                           nextRow: int,
+                                           nextColumn: int,
+                                           path: list,
+                                           img: np.ndarray,
+                                           compareFn,
+                                           oldStepCost: int,
+                                           frontier: list) -> None:
+        "Add next state to frontier"
+        newStepCost = self.getStepCost(currentRow=currentRow,
+                                       currentColumn=currentColumn,
+                                       nextRow=nextRow,
+                                       nextColumn=nextColumn,
+                                       img=img)
+        newPathCost = self.getPathCost(img, path)
+        step_cost = newStepCost + oldStepCost + newPathCost
+        self.addNode2Frontier_proc(nextRow,
+                                   nextColumn,
+                                   step_cost,
+                                   path,
+                                   frontier,
+                                   compareFn)
+
+    def addNode2Frontier_proc(self, nextRow: int,
+                              nextColumn: int,
+                              step_cost: int,
+                              path: list,
+                              frontier: list,
+                              compareFn):
+        "Add node to frontier then sort the frontier"
+        frontier.append((nextRow, nextColumn, step_cost, path))
+        self.sortFrontier_proc(
+            frontier,
+            compareFn=compareFn
+        )
+
+    def pruneFrontier(self, frontier: list, possible_steps: int,
+                      possible_energy: int):
+        "Prune nodes in frontier using possible steps and energy"
+        maxStepCost = possible_energy + possible_steps
+        frontier = [
+            node for node in frontier if (node[2] < maxStepCost and
+                                          len(node[3]) < possible_steps
+                                          )
+        ]
+        return frontier
+
+    def checkNextStateAvailability(self,
+                                   nextRow: int,
+                                   nextColumn: int,
+                                   explored: set,
+                                   img: np.ndarray,
+                                   possible_energy: int,
+                                   path: list,
+                                   frontier: list):
+        "Check if next state is available for adding to frontier later on"
+        if self.checkLimit(currentRow=nextRow,
+                           currentColumn=nextColumn,
+                           rownb=img.shape[0],
+                           colnb=img.shape[1]) is False:
+            return False
+        if self.checkAvailable(currentRow=nextRow,
+                               currentColumn=nextColumn,
+                               img=img,
+                               possible_energy=possible_energy,
+                               path=path) is False:
+            return False
+        if (nextRow, nextColumn) in explored:
+            return False
+        if self.checkInFrontier(currentRow=nextRow,
+                                currentColumn=nextColumn,
+                                frontier=frontier):
+            return False
+        return True
+
+    def generateNextStates4Frontier_proc(self, currentRow: int,
+                                         currentColumn: int,
+                                         img: np.ndarray,
+                                         path: [],
+                                         explored: set,
+                                         possible_energy: int,
+                                         frontier: list,
+                                         oldStepCost: int,
+                                         compareFn=lambda x: (x[2], len(x[3]))
+                                         ):
+        "generate next states and add it to frontier"
+        for act in self.moves:
+            nextRow, nextCol = self.moveOps[act](currentRow=currentRow,
+                                                 currentColumn=currentColumn)
+            if self.checkNextStateAvailability(nextRow=nextRow,
+                                               nextColumn=nextCol,
+                                               explored=explored,
+                                               img=img,
+                                               path=path,
+                                               possible_energy=possible_energy,
+                                               frontier=frontier):
+                self.addNextStateWithCost2Frontier_proc(
+                    currentRow=currentRow,
+                    currentColumn=currentColumn,
+                    nextRow=nextRow,
+                    nextColumn=nextCol,
+                    path=path,
+                    img=img,
+                    frontier=frontier,
+                    compareFn=compareFn,
+                    oldStepCost=oldStepCost
+                )
+        #
+
+    def filterMinZoneMoveWithCenterGoalDist(self, goalDist: dict,
+                                            minimalZoneMove: list):
+        "filter minimal zone move list with distance to goal in center"
+        minimalZoneMove = [
+            (r, c, m, d, g, goalDist[g]) for r, c, m, d, g in minimalZoneMove
+        ]
+        minimalZoneMove.sort(key=lambda x: x[5])
+        min2centerGoal = minimalZoneMove[0][5]
+        minimalZoneMove = [
+            zm for zm in minimalZoneMove if zm[5] == min2centerGoal
+        ]
+        return minimalZoneMove
+
+    def getPointZone(self, zoneArray: [np.ndarray],
                      currentRow: int,
                      currentColumn: int):
         "Get the zone that includes the currentColumn and row"
-        assert isinstance(zones, list)
+        assert isinstance(zoneArray, list)
         arr = [currentRow, currentColumn]
         pointZones = []
-        for zone in zones:
+        for zone in zoneArray:
             hasArray = any(np.equal(zone, arr).all(axis=1))
             if hasArray:
                 pointZones.append(zone)
         return pointZones
 
+    def generateGoalStatesDistances(self, img: np.ndarray):
+        "Generate valid goal states, central state, and distances to center"
+        goals = [(img.shape[0]-1, col) for col in range(img.shape[1])]  # 7
+        center_goal = (img.shape[0]-1, img.shape[1]//2)
+        goalDistance = {goal: abs(goal[1] - center_goal[1]) for goal in goals}
+        return goals, center_goal, goalDistance
+
+    def filterMinimalZoneMove(self, minimalZoneMove: list,
+                              goalDistance: dict):
+        "Arrange minimal zone move to have a single element"
+        minimalZoneMove.sort(key=lambda x: x[3])
+        dist = minimalZoneMove[0][3]
+        minimalZoneMove = [
+            el for el in minimalZoneMove if el[3] == dist
+        ]
+        if len(minimalZoneMove) > 1:
+            minimalZoneMove = self.filterMinZoneMoveWithCenterGoalDist(
+                goalDist=goalDistance,
+                minimalZoneMove=minimalZoneMove)
+            if len(minimalZoneMove) > 1:
+                minimalZoneMove = [minimalZoneMove[0][:5]]
+        return minimalZoneMove
+
     def search_best_path(self, img: np.ndarray,
                          fromRow: int,
                          fromColumn: int,
-                         goals: [(int, int)]
                          ):
         """
         Search best path for marking the seam
@@ -532,7 +701,8 @@ class SeamFuncsAI(SeamFuncs):
             5.2 Create a zones matrix, which contains all the coordinates
             of all the zones in a zone array
 
-        6. Create an initial state with row 0, column 0, cost 0 and empty path
+        6. Obtain an initial state after advancing with a greedy move
+            the initial state contains, row, column, 0 cost and empty path
         7. Create goal states, which is basically arriving at the end of the
         image
         8. Add initial state to frontier
@@ -577,7 +747,6 @@ class SeamFuncsAI(SeamFuncs):
                        value in it
                 14.6.7 remove newly computed distance from the element
                 14.6.8 assign minimalZoneMove2 to minimalZoneMove
-
             14.7 Obtain from the only element of minimalZoneMove: zone, move, 
                  closest point
             14.8 Compute the step cost from the current state to the closest
@@ -588,53 +757,196 @@ class SeamFuncsAI(SeamFuncs):
             14.11 sort frontier by distance to goal states and overall step
             cost of paths
         15. Forall moves that are doable:
+            15.1 Obtain next state
+            15.2 Check whether the given state is available
+            15.3 If available state is not in explored set and frontier
+            15.4 Obtain the step cost for the new state
+            15.5 Add the new state, step cost and path to frontier
+            15.6 Sort frontier by distance to goal states and overall step
+            costs of paths
         """
-        explored = set()
-        frontier = []
-        total_possible_energy = 255 * img.shape[0]
-        # possible_steps = img.shape[0] + img.shape[1]
-        # total_possible_energy += possible_steps
-        total_possible_energy = 255 * img.shape[0] * img.shape[1]
-        initial_state = [0, 0, 0, []]
-        goals = [(img.shape[0]-1, col) for col in range(img.shape[1])]
-        frontier.append(initial_state)
-        while frontier:
-            row, col, step_cost, path = frontier.pop()
+        explored = set()  # step 1
+        frontier = []  # step 2
+
+        # 3 pruning criteria
+        possible_energy = 255 * img.shape[0]
+        possible_steps = max(img.shape) * 2
+        def compareFn(x): return (x[2], len(x[3]))
+        # 4 zero energy zones
+        valzone = self.getInferior2MeanZones(img)
+        # 5 zero indice regroup
+        moveZones = self.getMoveZonesFromValZone(valZone=valzone)
+        initial_state = [0, 0, 0, []]  # 6
+        (goals,
+         center_goal,
+         goalDistance) = self.generateGoalStatesDistances(img)  # 7
+        frontier.append(initial_state)  # 8
+        while frontier:  # 9
+            row, col, step_cost, path = frontier.pop()  # 10
             path_copy = path.copy()
-            path_copy.append((row, col))
-            explored.add((row, col))
+            path_copy.append((row, col))  # 11
+            explored.add((row, col))  # 12
             self.path = path_copy
-            if self.testGoalCoordinate(currentRow=row,
-                                       currentColumn=col,
-                                       goals=goals
-                                       ):
+            if self.testGoalCoordinate(currentRow=row, currentColumn=col,
+                                       goals=goals):  # 13
                 return path_copy
-            for act in self.moves:
-                nextRow, nextCol = self.moveOps[act](currentRow=row,
-                                                     currentColumn=col)
-                if self.checkLimit(currentRow=nextRow,
-                                   currentColumn=nextCol,
-                                   rownb=img.shape[0],
-                                   colnb=img.shape[1]) is False:
+            #
+            if self.checkPointInCoordZone(coordzone=valzone, currentRow=row,
+                                          currentColumn=col):
+                #
+                minimalZoneMove = self.populateMinimalMoveZone(
+                    moveZones, currentRow=row, currentColumn=col,
+                    goals=goals)
+                if len(minimalZoneMove) == 0:
+                    self.generateNextStates4Frontier_proc(
+                        currentRow=row,
+                        currentColumn=col,
+                        img=img,
+                        explored=explored,
+                        frontier=frontier,
+                        path=path_copy,
+                        possible_energy=possible_energy,
+                        oldStepCost=step_cost,
+                        compareFn=compareFn
+                    )
+                    self.pruneFrontier(frontier,
+                                       possible_steps=possible_steps,
+                                       possible_energy=possible_energy)
                     continue
                 #
-                if self.checkAvailable(currentRow=nextRow,
-                                       currentColumn=nextCol,
-                                       img=img,
-                                       path=path_copy):
-                    if ((nextRow, nextCol) not in explored and
-                            self.checkFrontier(currentRow=nextRow,
-                                               currentColumn=nextCol,
-                                               frontier=frontier) is False):
-                        step_cost = self.getStepCost(currentRow=row,
-                                                     currentColumn=col,
-                                                     nextRow=nextRow,
-                                                     nextColumn=nextCol,
-                                                     img=img)
-                        frontier.append((nextRow, nextCol,
-                                         step_cost,
-                                         path_copy))
-                        frontier.sort(key=lambda x: x[2], reverse=True)
+                minimalZoneMove = self.filterMinimalZoneMove(
+                    minimalZoneMove,
+                    goalDistance
+                )
+                (closestRow, closestCol, zoneMove,
+                 dist, goal) = minimalZoneMove.pop()
+                (nextRow, nextCol,
+                 nextCost, nextPath) = self.jump2PointWithCost(
+                    img=img,
+                    fromRow=row,
+                    fromColumn=col,
+                    toRow=closestRow,
+                    toColumn=closestCol,
+                    moveDirection=zoneMove
+                )
+                if self.checkNextStateAvailability(
+                        nextRow=nextRow,
+                        nextColumn=nextCol,
+                        explored=explored,
+                        img=img,
+                        possible_energy=possible_energy,
+                        path=path_copy,
+                        frontier=frontier):
+                    nextPath = path_copy + nextPath
+                    nextPathCost = self.getPathCost(img, nextPath)
+                    nextCost += step_cost + nextPathCost
+                    self.addNode2Frontier_proc(nextRow=nextRow,
+                                               nextColumn=nextCol,
+                                               step_cost=nextCost,
+                                               frontier=frontier,
+                                               compareFn=compareFn)
+                    self.pruneFrontier(frontier,
+                                       possible_steps=possible_steps,
+                                       possible_energy=possible_energy)
+            else:
+                self.generateNextStates4Frontier_proc(
+                    currentRow=row,
+                    currentColumn=col,
+                    img=img,
+                    explored=explored,
+                    frontier=frontier,
+                    possible_energy=possible_energy,
+                    oldStepCost=step_cost,
+                    path=path_copy)
+                self.pruneFrontier(frontier,
+                                   possible_steps=possible_steps,
+                                   possible_energy=possible_energy)
+
+    def point2pointSearch_full(self, img: np.ndarray,
+                           fromRow: int,
+                           fromColumn: int,
+                           toRow: int,
+                           toColumn: int):
+        "Search the least cost path from a start point to an end point"
+        explored = set()  # step 1
+        frontier = []  # step 2
+        # 3
+        possible_energy = 255 * (toRow - fromRow)
+        possible_steps = max(toRow, toColumn) * 2
+
+        initial_state = [fromRow, fromColumn, 0, []]  # 6
+        goals = [(toRow, toColumn)]
+        frontier.append(initial_state)  # 8
+        while frontier:
+            row, col, step_cost, path = frontier.pop()  # 10
+            path_copy = path.copy()
+            path_copy.append((row, col))  # 11
+            explored.add((row, col))  # 12
+            if self.testGoalCoordinate(row, col, goals):
+                return path_copy
+            self.generateNextStates4Frontier_proc(
+                currentRow=row,
+                currentColumn=col,
+                img=img,
+                explored=explored,
+                frontier=frontier,
+                possible_energy=possible_energy,
+                oldStepCost=step_cost,
+                path=path_copy)
+            self.pruneFrontier(frontier,
+                               possible_steps=possible_steps,
+                               possible_energy=possible_energy)
+
+    def point2pointsSearch_full(self, img: np.ndarray,
+                                fromRow: int,
+                                fromColumn: int,
+                                endPoints: list):
+        "point2point search adapted to multiple points"
+        explored = set()  # step 1
+        frontier = []  # step 2
+        # 3
+        maxGoalRow = max([p[0] for p in endPoints])
+        maxGoalCol = max([p[1] for p in endPoints])
+        possible_energy = 255 * (maxGoalRow - fromRow)
+        possible_steps = max(maxGoalRow, maxGoalCol) * 2
+
+        initial_state = [fromRow, fromColumn, 0, []]  # 6
+        goals = endPoints
+        frontier.append(initial_state)  # 8
+        while frontier:
+            row, col, step_cost, path = frontier.pop()  # 10
+            path_copy = path.copy()
+            path_copy.append((row, col))  # 11
+            explored.add((row, col))  # 12
+            if self.testGoalCoordinate(row, col, goals):
+                return path_copy
+            self.generateNextStates4Frontier_proc(
+                currentRow=row,
+                currentColumn=col,
+                img=img,
+                explored=explored,
+                frontier=frontier,
+                possible_energy=possible_energy,
+                oldStepCost=step_cost,
+                path=path_copy)
+            self.pruneFrontier(frontier,
+                               possible_steps=possible_steps,
+                               possible_energy=possible_energy)
+
+    def findSeamCandidate(self, img: np.ndarray):
+        """
+        Find a seam candidate in the image
+
+        Algorithm is the following:
+
+        - Compute greedy zone (0 energy zone)
+        - compute inferior to mean zone ( low energy zone )
+        - regroup both zone types into move directions
+        - perform greedy move inside 0 energy zone
+        - perform point2point search inside inferior zone
+        - perform point1points search outside of these zones
+        """
+        pass
 
     def min_seam_with_cumsum(self,
                              img: np.ndarray):

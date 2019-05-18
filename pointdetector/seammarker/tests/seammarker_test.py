@@ -507,6 +507,62 @@ class SeamMarkerTest(unittest.TestCase):
         # coordspath = funcs.minimum_seam(vietslice, emap)
         # pdb.set_trace()
 
+    def test_seammarker_seam_ai_goUp(self):
+        r, c = 2, 1
+        compr, compc = 1, 1
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goUp(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goDown(self):
+        r, c = 2, 1
+        compr, compc = 3, 1
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goDown(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goRight(self):
+        r, c = 2, 1
+        compr, compc = 2, 2
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goRight(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goLeft(self):
+        r, c = 2, 1
+        compr, compc = 2, 0
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goLeft(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goLeftUp(self):
+        r, c = 2, 1
+        compr, compc = 1, 0
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goLeftUp(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goLeftDown(self):
+        r, c = 2, 1
+        compr, compc = 3, 0
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goLeftDown(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goRightUp(self):
+        r, c = 2, 1
+        compr, compc = 1, 2
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goRightUp(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
+    def test_seammarker_seam_ai_goRightDown(self):
+        r, c = 2, 1
+        compr, compc = 3, 2
+        funcs = SeamFuncsAI()
+        outr, outc = funcs.goRightDown(r, c)
+        self.assertEqual((outr, outc), (compr, compc))
+
     def test_seammarker_getZeroZones(self):
         vietImcp = self.loadImageCol()
         vietslice = vietImcp[:, 550:600]
@@ -535,12 +591,66 @@ class SeamMarkerTest(unittest.TestCase):
         self.compareArrays(zones, compmat,
                            "Mean indices are not equivalent")
 
-    def test_seammarker_getVerticalMoveZone(self):
+    def test_seammarker_seam_ai_getImageCoordinateArray(self):
+        vietImcp = self.loadImageCol()
+        rnb, cnb = vietImcp.shape[:2]
+        comparr = np.array([[[r, c] for c in range(cnb)] for r in range(rnb)],
+                           dtype=np.int)
+        funcs = SeamFuncsAI()
+        outarr = funcs.getImageCoordinateArray(vietImcp)
+        self.compareArrays(comparr, outarr, "image coordinate array failure")
+
+    def test_seammarker_seam_ai_checkLimit_allIn(self):
+        rownb = 100
+        colnb = 100
+        rnb = 15
+        cnb = 30
+        funcs = SeamFuncsAI()
+        checkval = funcs.checkLimit(rnb, cnb, rownb, colnb)
+        self.assertEqual(checkval, True)
+
+    def test_seammarker_seam_ai_checkLimit_rowOut(self):
+        rownb = 100
+        colnb = 100
+        rnb = 150
+        cnb = 30
+        funcs = SeamFuncsAI()
+        checkval = funcs.checkLimit(rnb, cnb, rownb, colnb)
+        self.assertEqual(checkval, False)
+
+    def test_seammarker_seam_ai_checkLimit_rowNegative(self):
+        rownb = 100
+        colnb = 100
+        rnb = -15
+        cnb = 30
+        funcs = SeamFuncsAI()
+        checkval = funcs.checkLimit(rnb, cnb, rownb, colnb)
+        self.assertEqual(checkval, False)
+
+    def test_seammarker_seam_ai_checkLimit_colOut(self):
+        rownb = 100
+        colnb = 100
+        rnb = 15
+        cnb = 300
+        funcs = SeamFuncsAI()
+        checkval = funcs.checkLimit(rnb, cnb, rownb, colnb)
+        self.assertEqual(checkval, False)
+
+    def test_seammarker_seam_ai_checkLimit_colNegative(self):
+        rownb = 100
+        colnb = 100
+        rnb = 15
+        cnb = -3
+        funcs = SeamFuncsAI()
+        checkval = funcs.checkLimit(rnb, cnb, rownb, colnb)
+        self.assertEqual(checkval, False)
+
+    def test_seammarker_getVHDMoveZone_Down(self):
         "get vertical move zone"
         zones = np.load(self.zero_zone_mat_path)
         zones = zones[:, 1:]
         funcs = SeamFuncsAI()
-        vmoves = funcs.getVerticalMoveZone(zones)
+        vmoves = funcs.getVHDMoveZone(zones, "down")
 
     def test_seammarker_minimum_seam_emap_matrix(self):
         "tests the minimum seam function of pointcarver"

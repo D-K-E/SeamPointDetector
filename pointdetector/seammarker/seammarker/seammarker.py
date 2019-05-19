@@ -207,6 +207,8 @@ class SeamFuncsAI(SeamFuncs):
         row, col = img.shape[:2]
         coords = [[[r, c] for c in range(col)] for r in range(row)]
         coordarr = np.array(coords, dtype=np.int)
+        coordarr = coordarr.reshape((-1, 2))
+        coordarr = np.unique(coordarr, axis=0)
         return coordarr
 
     def getValZones(self, img: np.ndarray, val: int, op: str):
@@ -622,7 +624,6 @@ class SeamFuncsAI(SeamFuncs):
                     compareFn=compareFn,
                     oldStepCost=oldStepCost
                 )
-        #
 
     def filterMinZoneMoveWithCenterGoalDist(self, goalDist: dict,
                                             minimalZoneMove: list):

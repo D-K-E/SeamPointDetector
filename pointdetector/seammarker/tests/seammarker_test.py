@@ -596,6 +596,8 @@ class SeamMarkerTest(unittest.TestCase):
         rnb, cnb = vietImcp.shape[:2]
         comparr = np.array([[[r, c] for c in range(cnb)] for r in range(rnb)],
                            dtype=np.int)
+        comparr = comparr.reshape((-1, 2))
+        comparr = np.unique(comparr, axis=0)
         funcs = SeamFuncsAI()
         outarr = funcs.getImageCoordinateArray(vietImcp)
         self.compareArrays(comparr, outarr, "image coordinate array failure")
@@ -645,12 +647,30 @@ class SeamMarkerTest(unittest.TestCase):
         checkval = funcs.checkLimit(rnb, cnb, rownb, colnb)
         self.assertEqual(checkval, False)
 
-    def test_seammarker_getVHDMoveZone_Down(self):
+    def test_seammarker_getVHDMoveZone_DownNoMove(self):
         "get vertical move zone"
         zones = np.load(self.zero_zone_mat_path)
         zones = zones[:, 1:]
         funcs = SeamFuncsAI()
-        vmoves = funcs.getVHDMoveZone(zones, "down")
+        vmoves, indices = funcs.getVHDMoveZone(zones, "down")
+        self.assertEqual(vmoves, [])
+
+    def test_seammarker_getVHDMoveZone_UpNoMove(self):
+        "get vertical move zone"
+        zones = np.load(self.zero_zone_mat_path)
+        zones = zones[:, 1:]
+        funcs = SeamFuncsAI()
+        vmoves, indices = funcs.getVHDMoveZone(zones, "up")
+        self.assertEqual(vmoves, [])
+
+    def test_seammarker_getVHDMoveZone_DownMove(self):
+        vietImcp = self.loadImageCol()
+        vietslice = vietImcp[:, 550:600]
+        funcs = SeamFuncsAI()
+        coordarr = funcs.getImageCoordinateArray(vietslice)
+        # pdb.set_trace()
+        vmoves, indices = funcs.getVHDMoveZone(coordarr, "down")
+        comparr = None
 
     def test_seammarker_minimum_seam_emap_matrix(self):
         "tests the minimum seam function of pointcarver"

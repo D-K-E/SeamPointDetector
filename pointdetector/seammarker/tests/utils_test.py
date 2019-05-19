@@ -7,6 +7,7 @@ from seammarker.utils import shapeCoordinate
 from seammarker.utils import normalizeImageVals
 from seammarker.utils import getConsecutive1D
 from seammarker.utils import getConsecutive2D
+from seammarker.utils import computeSubtractionTable
 from seammarker.utils import saveJson
 from seammarker.utils import stripExt
 from seammarker.utils import readImage
@@ -18,6 +19,7 @@ import os
 from PIL import Image
 import numpy as np
 import json
+import pdb
 
 
 class UtilsTest(unittest.TestCase):
@@ -170,6 +172,19 @@ class UtilsTest(unittest.TestCase):
             self.compareArrays(val, out,
                                "Array " + str(i) + " is not the same with"
                                " compare value.")
+
+    def test_computeSubtractionTable(self):
+        ""
+        vietImg = np.array(Image.open(self.image_col_path))
+        vietslice = vietImg[:, 550:600]
+        rnb, cnb = vietslice.shape[:2]
+        arr = np.array([[[r, c] for c in range(cnb)] for r in range(rnb)],
+                           dtype=np.int)
+        arr = arr.reshape((-1, 2))
+        arr = np.unique(arr, axis=0)
+        vert_diffval = [1, 0]
+        pdb.set_trace()
+        foo = computeSubtractionTable(arr, vert_diffval)
 
 
 if __name__ == "__main__":

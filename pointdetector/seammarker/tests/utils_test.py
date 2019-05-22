@@ -7,7 +7,7 @@ from seammarker.utils import shapeCoordinate
 from seammarker.utils import normalizeImageVals
 from seammarker.utils import getConsecutive1D
 from seammarker.utils import getConsecutive2D
-from seammarker.utils import computeSubtractionTable
+from seammarker.utils import getLinesFromCoordinates
 from seammarker.utils import saveJson
 from seammarker.utils import stripExt
 from seammarker.utils import readImage
@@ -173,8 +173,7 @@ class UtilsTest(unittest.TestCase):
                                "Array " + str(i) + " is not the same with"
                                " compare value.")
 
-    def test_computeSubtractionTable(self):
-        ""
+    def test_getLinesFromCoordinates(self):
         vietImg = np.array(Image.open(self.image_col_path))
         vietslice = vietImg[:, 550:600]
         rnb, cnb = vietslice.shape[:2]
@@ -182,9 +181,9 @@ class UtilsTest(unittest.TestCase):
                            dtype=np.int)
         arr = arr.reshape((-1, 2))
         arr = np.unique(arr, axis=0)
-        vert_diffval = [1, 0]
         pdb.set_trace()
-        foo = computeSubtractionTable(arr, vert_diffval)
+        lines = getLinesFromCoordinates(arr)
+
 
 
 if __name__ == "__main__":

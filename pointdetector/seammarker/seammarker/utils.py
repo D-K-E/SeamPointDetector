@@ -36,75 +36,130 @@ def getDiffDirection(stepsize: int,
     return [rowdiff, coldiff]
 
 
-def computeSubtractionTable(data: np.ndarray,
-                            diffval: [int, int]):
-    """Obtain subtraction table from data
-
-    Our idea is pretty simple
-    the maximum column value marks a change on row values in coordinates
-    Ex. matrix like [[3,8], [0,9]] whose coordinate matrix would be
-    [[0, 0], [0, 1], [1, 0], [1, 1]], notice that once we arrive to the
-    column number 1, we need to change the row number.
-    Thus the maximum column number is like a pivot for row number
-    In a split coordinate array we want to make sure that each coordinate
-    has a row from above and below. Thus we need a split size that is 3 times
-    larger than a normal pivot value, when it makes sense.
-
-    TODO
-    I can group the elements per element basis. That is I find
-    group of elements that have the specified difference.
-    I am not able to constitute a single array which satisfies
-    the diffval from these groups
-    one approach is to group the first and second element of groups
-    that satisfy the diffval
-    for example [[[1,0],[0,0]], ..., [[2,0], [1,0]], ... ]
-    notice that [1, 0] is in first position at first in second position
-    at second
+def getStraightLineWithSteps(point1: {"x": int, "y": int},
+                             point2: {"x": int, "y": int},
+                             stepsize=1,
+                             isArr=False):
     """
-    splitsize = 0
-    drows = data.shape[0]
-    maxcol = data[:, 1].max()
-    rowPivotVal = maxcol
-    rowAmount = rowPivotVal * 3
-    if drows > rowAmount:
-        splitsize = drows // rowAmount
-        dataList = np.array_split(data, splitsize, axis=0)
-        lastData = [dataList[-2], dataList[-1]]
-        lastData = np.concatenate(lastData, axis=0)
-        dataList[-2] = lastData
-    else:
-        if drows > 50 and drows < 500:
-            splitsize = 100
-        elif drows > 500 and drows < 1000:
-            splitsize = 800
-        elif drows > 1000 and drows < 2000:
-            splitsize = 1500
-        elif drows > 2000:
-            splitsize = 2000
-        dataList = np.array_split(data, splitsize, axis=0)
-        lastData = [dataList[-2], dataList[-1]]
-        lastData = np.concatenate(lastData, axis=0)
-        dataList[-2] = lastData
-    diffGroups = []
-    groupIndices = []
-    offset = 0
-    for subData in dataList:
-        subrowSize = subData.shape[0]
-        subData[:, 0] = subData[:, 0]
-        subTable = subData[:, np.newaxis, :] - subData
-        cond = (
-            subTable[:, :, 0] != diffval[0]
-        ) & (subTable[:, :, 1] != diffval[1])
-        indices = np.argwhere(cond)
-        diffGroup = np.take(subData, indices, axis=0)
-        diffGroups.append(diffGroup)
-        updatedIndices = indices + offset
-        groupIndices.append(updatedIndices)
-        offset += subrowSize
-    diffGroups = np.concatenate(diffGroups, axis=0)
-    groupIndices = np.concatenate(groupIndices, axis=0)
-    return diffGroups, groupIndices
+        Get line from points including the points included in the line
+        Bresenham's line algorithm adapted from pseudocode in wikipedia:
+        https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
 
+        image should be grayscale
+
+        """
+    #  define local variables for readability
+    P1X = point1['x']
+    P1Y = point1["y"]
+    P2X = point2["x"]
+    P2Y = point2["y"]
+
+    #  difference and absolute difference between points
+    #  used to calculate slope and relative location between points
+    diffX = P2X - P1X
+    diffXa = np.absolute(diffX, dtype="int32")
+    diffY = P2Y - P1Y
+    diffYa = np.absolute(diffY, dtype="int32")
+    #
+    steepx = stepsize
+    if P1X < P2X:
+        steepx = stepsize
+    else:
+        steepx = -stepsize
+    #
+    if P1Y < P2Y:
+        steepy = stepsize
+    else:
+        steepy = -stepsize
+    #
+    div_term = diffXa
+    #
+    if diffXa > diffYa:
+        div_term = diffXa
+    else:
+        div_term = -diffYa
+        #
+    error = div_term / 2
+    #
+    error2 = 0
+    #
+    arrival_condition = bool((P1X, P1Y) == (P2X, P2Y))
+    #
+    line_points = []
+    line_points.append([P1X, P1Y])
+    #
+    while arrival_condition is False:
+        error2 = error
+        if error2 > -diffXa:
+            error = error - diffYa
+            P1X = P1X + steepx
+            #
+        if error2 < diffYa:
+            error = error + diffXa
+            P1Y = P1Y + steepy
+            #
+            # Check
+        line_points.append([P1X, P1Y])
+        arrival_condition = bool((P1X, P1Y) == (P2X, P2Y))
+    #
+    if isArr:
+        line_points = np.array(line_points, dtype=np.int)
+    return line_points
+
+
+def getRowColumnMask(line: np.ndarray, coordarr: np.ndarray) -> np.ndarray:
+    """Get row column boolean mask indicating whether line coordinates are in
+    coordinate array
+    """
+    cols = line[:, 1]
+    rows = line[:, 0]
+    rowbool = np.isin(rows, coordarr[:, 0])
+    colbool = np.isin(cols, coordarr[:, 1])
+    mask = rowbool & colbool
+    return mask
+
+
+def filterLineCoordsWithCoordinates(line: np.ndarray,
+                                    coordarr: np.ndarray) -> np.ndarray:
+    "Filter line coordinates using coordinate array"
+    mask = getRowColumnMask(line, coordarr)
+    line = line[mask]
+    return line
+
+
+def addLine2Lines(lines: [np.ndarray], line: np.ndarray):
+    "Add line to lines if line coordinates are not in any of the lines"
+    checks = []
+    for inline in lines:
+        mask = getRowColumnMask(line, inline)
+        check = mask.all()
+        checks.append(check)
+    if all(checks):
+        lines.append(line)
+
+
+
+def getLinesFromCoordinates(coordarr: np.ndarray):
+    """
+    Obtain lines from coordinate array
+    """
+    assert len(coordarr.shape) == 2
+    assert coordarr.shape[1] == 2
+    minRow = coordarr[:, 0].min()
+    maxRow = coordarr[:, 0].max()
+    minRowCoords = coordarr[coordarr[:, 0] == minRow]
+    maxRowCoords = coordarr[coordarr[:, 0] == maxRow]
+    minMaxLines = []
+    for i in minRowCoords[:, 1]:
+        for c in maxRowCoords[:, 1]:
+            point1 = {"x": i,
+                      "y": minRow}
+            point2 = {"x": c,
+                      "y": maxRow}
+            line = getStraightLineWithSteps(point1, point2, isArr=True)
+            line = filterLineCoordsWithCoordinates(line, coordarr)
+            minMaxLines.append(line)
+    return minMaxLines
 
 
 def getConsecutive2D(data: np.ndarray,
@@ -114,19 +169,27 @@ def getConsecutive2D(data: np.ndarray,
     "Get consecutive values in horizontal vertical and diagonal directions"
     assert len(data.shape) == 2
     assert data.shape[1] == 2
-    diffval=getDiffDirection(stepsize, direction)
-    diffarr=data[1:] - data[:-1]
-    indices=np.argwhere(diffarr != diffval)
-    indices=indices.T
-    indices=indices[0] + 1
+    diffval = getDiffDirection(stepsize, direction)
+    diffarr = data[1:] - data[:-1]
+    indices = np.argwhere(diffarr != diffval)
+    indices = indices.T
+    indices = indices[0] + 1
     if only_index:
         return indices
     else:
-        splitdata=np.split(data, indices, axis=0)
-        splitdata=[
+        splitdata = np.split(data, indices, axis=0)
+        splitdata = [
             data for data in splitdata if data.size > 0 and data.shape[0] > 1
         ]
         return splitdata, indices
+
+
+def getConsecutive2DSplit(data: np.ndarray,
+                          direction: str,
+                          stepsize=1,
+                          only_index=False):
+    ""
+    pass
 
 # End stack overflow
 
@@ -140,34 +203,34 @@ def saveJson(path, obj):
 
 def stripExt(str1: str, ext_delimiter='.') -> [str, str]:
     "Strip extension"
-    strsplit=str1.split(ext_delimiter)
-    ext=strsplit.pop()
-    newstr=ext_delimiter.join(strsplit)
+    strsplit = str1.split(ext_delimiter)
+    ext = strsplit.pop()
+    newstr = ext_delimiter.join(strsplit)
     return (newstr, ext)
 
 
 def readImage(path: str) -> np.ndarray:
     "Read image from the path"
-    pilim=Image.open(path)
+    pilim = Image.open(path)
     return np.array(pilim)
 
 
 def shapeCoordinate(coord: np.ndarray):
     "Reshape coordinate to have [[y, x]] structure"
-    cshape=coord.shape
+    cshape = coord.shape
     assert 2 in cshape or 3 in cshape
     if cshape[0] == 2:
-        coord=coord.T
+        coord = coord.T
     elif cshape[1] == 2:
         pass
     elif cshape[0] == 3:
-        coord=coord.T
-        coord=coord[:, :2]
+        coord = coord.T
+        coord = coord[:, :2]
     elif cshape[1] == 3:
-        coord=coord[:, :2]
+        coord = coord[:, :2]
     # obtain unique coords
-    uni1, index=np.unique(coord, return_index=True, axis=0)
-    uni1=coord[np.sort(index), :]
+    uni1, index = np.unique(coord, return_index=True, axis=0)
+    uni1 = coord[np.sort(index), :]
     return uni1
 
 
@@ -182,15 +245,15 @@ def assertCond(var, cond: bool, printType=True):
 
 def normalizeImageVals(img: np.ndarray):
     ""
-    r, c=img.shape[:2]
-    flatim=img.reshape((-1))
+    r, c = img.shape[:2]
+    flatim = img.reshape((-1))
     #
-    normImg=np.interp(flatim,
+    normImg = np.interp(flatim,
                         (flatim.min(), flatim.max()),
                         (0, 255),
                         )
-    normImg=normImg.astype(np.uint8)
-    normImg=normImg.reshape((r, c))
+    normImg = normImg.astype(np.uint8)
+    normImg = normImg.reshape((r, c))
     return normImg
 
 # Debug related
@@ -199,16 +262,16 @@ def normalizeImageVals(img: np.ndarray):
 def drawMark2Image(image: np.ndarray,
                    coord: np.ndarray,
                    imstr: str):
-    zeroimg=np.zeros_like(image, dtype=np.uint8)
-    imcp=image.copy()
+    zeroimg = np.zeros_like(image, dtype=np.uint8)
+    imcp = image.copy()
     assert coord.shape[1] == 2
     for i in range(coord.shape[0]):
-        yx=coord[i, :]
-        imcp[yx[0], yx[1], :]=255
-        zeroimg[yx[0], yx[1], :]=255
+        yx = coord[i, :]
+        imcp[yx[0], yx[1], :] = 255
+        zeroimg[yx[0], yx[1], :] = 255
     #
-    zeroname=imstr + "-zero.png"
-    name=imstr + ".png"
+    zeroname = imstr + "-zero.png"
+    name = imstr + ".png"
     Image.fromarray(imcp).save(name)
     Image.fromarray(zeroimg).save(zeroname)
     return imcp, zeroimg

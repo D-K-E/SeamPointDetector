@@ -123,6 +123,101 @@ class SeamFuncs:
 
         return imcopy, mask
 
+    def minimum_seam_v2(self, img: np.ndarray([], dtype=np.uint8),
+                        emap=None):
+        """
+        Minimum seam using a window around pixels
+        """
+        r, c, _ = img.shape
+
+        # if the energy map is already calculated
+        if emap is not None:
+            energy_map = emap
+        else:
+            energy_map = self.calc_energy(img)
+
+        M = energy_map.copy()
+        backtrack = np.zeros((r, c, 6), dtype=np.int)
+
+        for i in range(1, r):
+            for j in range(0, c):
+                # handle both left and right edges of the image
+                if j == 0:
+                    offset_value = j
+                    colrange = j + 2
+                    maprow = M[i - 1, offset_value:colrange]
+                    localMinEnergy = maprow.min()
+                    min_energy_indx_in_row = np.argmin(maprow)
+                    min_energy_indx_col = min_energy_indx_in_row + offset_value
+                    minRowVal = i - 1
+                    minColVal = min_energy_indx_col
+                elif j == c-1:
+                    offset_value = j - 1
+                    colrange = j + 2
+                    maprow = M[i - 1, offset_value:colrange]
+                    localMinEnergy = maprow.min()
+                    min_energy_indx_in_row = np.argmin(maprow)
+                    min_energy_indx_col = min_energy_indx_in_row + offset_value
+                    minRowVal = i - 1
+                    minColVal = min_energy_indx_col
+                    backtrack[i, j] = [i - 1, min_energy_indx_col,
+                                       i, j,
+                                       localMinEnergy, globalMinEnergy
+                                       ]
+                else:
+                    col_offset_value = j - 1
+                    colrange = j + 2
+                    row_offset_value = i - 1
+                    rowrange = i + 2
+                    imageWindow = M[row_offset_value:rowrange,
+                                    col_offset_value:colrange]
+                    minIndex = np.unravel_index(np.argmin(imageWindow,
+                                                          axis=None),
+                                                imageWindow.shape)
+                    localMinEnergy = imageWindow[minIndex]
+                    minRowVal = minIndex[0] + row_offset_value
+                    minColVal = minIndex[1] + col_offset_value
+
+                M[i, j] += localMinEnergy
+                globalMinEnergy = M[i, j]
+                backtrack[i, j] = [minRowVal, minColVal, localMinEnergy,
+                                   i, j, globalMinEnergy]
+        return M, backtrack
+
+    def mark_column_v2(self,
+                       img: np.ndarray([], dtype=np.uint8),
+                       emap=None,
+                       mark_color=[250, 120, 120]  # yellow
+                       ):
+        r, c, _ = img.shape
+        imcopy = img.copy()
+
+        M, backtrack = self.minimum_seam_v2(img, emap)
+
+        # Create a (r, c) matrix filled with the value True
+        # We'll be marking all pixels from the image which
+        # have False later
+        mask = np.zeros((r, c), dtype=np.bool)
+
+        # Find the position of the smallest element in the
+        # last row of M
+        colindx = np.argmin(M[-1])
+
+        for i in reversed(range(r)):
+            # Mark the pixels
+            # and save mark positions for later use
+            mask[i, colindx] = True
+            i, colindx = backtrack[i, colindx]
+
+        # Since the image has 3 channels, we convert our
+        # mask to 3D
+        mask = np.stack([mask] * 3, axis=2)
+
+        # mark the pixels with the given mark color
+        imcopy = np.where(mask, mark_color, img)
+
+        return imcopy, mask
+
     def mark_row(self,
                  img: np.ndarray([], dtype=np.uint8),
                  mark_color=[250, 120, 120]):
@@ -622,8 +717,7 @@ class SeamFuncsAI(SeamFuncs):
                     img=img,
                     frontier=frontier,
                     compareFn=compareFn,
-                    oldStepCost=oldStepCost
-                )
+                    oldStepCost=oldStepCost)
 
     def filterMinZoneMoveWithCenterGoalDist(self, goalDist: dict,
                                             minimalZoneMove: list):
@@ -864,10 +958,10 @@ class SeamFuncsAI(SeamFuncs):
                                    possible_energy=possible_energy)
 
     def point2pointSearch_full(self, img: np.ndarray,
-                           fromRow: int,
-                           fromColumn: int,
-                           toRow: int,
-                           toColumn: int):
+                               fromRow: int,
+                               fromColumn: int,
+                               toRow: int,
+                               toColumn: int):
         "Search the least cost path from a start point to an end point"
         explored = set()  # step 1
         frontier = []  # step 2

@@ -713,6 +713,15 @@ class SeamMarkerTest(unittest.TestCase):
             "checking backtrack"
         )
 
+    def test_seammarker_mark_column_v2(self):
+        "tests the minimum seam function of pointcarver"
+        vietImcp = self.loadImageCol()
+        vietslice = vietImcp[:, 550:600]
+        carver = SeamMarker(img=vietImcp)
+        emap = carver.calc_energy(vietslice)
+        pdb.set_trace()
+        imcp, mask = carver.mark_column_v2(img=vietslice, emap=emap)
+
     def test_seammarker_mark_column(self):
         compimpath = os.path.join(self.imagedir, 'slicemark.png')
         viet = self.loadImageCol()

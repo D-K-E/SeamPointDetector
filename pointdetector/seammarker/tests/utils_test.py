@@ -16,10 +16,20 @@ from seammarker.utils import drawMark2Image
 
 import unittest
 import os
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 import json
 import pdb
+
+
+def drawCoordinate(img: np.ndarray,
+                   coordarr: np.ndarray):
+    "Draw coordinate"
+    imcp = img.copy()
+    for i in range(coordarr.shape[0]):
+        r, c = coordarr[i, :]
+        imcp[r, c] = 255
+    return imcp
 
 
 class UtilsTest(unittest.TestCase):
@@ -35,6 +45,7 @@ class UtilsTest(unittest.TestCase):
         assetdir = os.path.join(testdir, 'assets')
         self.assetdir = assetdir
         self.imagedir = os.path.join(assetdir, 'images')
+        self.utilsImageDir = os.path.join(self.imagedir, 'utils')
         jsondir = os.path.join(assetdir, 'jsonfiles')
         self.npdir = os.path.join(assetdir, 'numpyfiles')
         self.image_col_path = os.path.join(self.imagedir, 'vietHard.jpg')
@@ -63,7 +74,7 @@ class UtilsTest(unittest.TestCase):
         "test function for obtaining consecutive values in an array"
         inarr = np.array([0, 1, 123, 15, 16, 17, 138, 124,
                           186, 139, 125, 126])
-        g1 = np.array([0,1])
+        g1 = np.array([0, 1])
         g2 = np.array([15, 16, 17])
         g3 = np.array([125, 126])
         outarr = [g1, g2, g3]
@@ -176,14 +187,30 @@ class UtilsTest(unittest.TestCase):
     def test_getLinesFromCoordinates(self):
         vietImg = np.array(Image.open(self.image_col_path))
         vietslice = vietImg[:, 550:600]
+        vietimg = Image.fromarray(vietslice)
+        grayimg = ImageOps.grayscale(vietimg)
+        vietimg = np.array(grayimg)
+        vietimg = normalizeImageVals(vietimg)
+        data = np.zeros((vietimg.shape[0], vietimg.shape[1], 3), dtype=np.int)
+        data[:, :, 0] = vietimg
         rnb, cnb = vietslice.shape[:2]
         arr = np.array([[[r, c] for c in range(cnb)] for r in range(rnb)],
-                           dtype=np.int)
-        arr = arr.reshape((-1, 2))
-        arr = np.unique(arr, axis=0)
-        pdb.set_trace()
-        lines = getLinesFromCoordinates(arr)
-
+                       dtype=np.int)
+        data[:, :, 1:] = arr
+        datacond = data[:, :, 0] < data[:, :, 0].mean()
+        data = data[datacond, :]
+        data = data[:, 1:]
+        # arr = arr.reshape((-1, 2))
+        # arr = np.unique(arr, axis=0)
+        lines = getLinesFromCoordinates(data)
+        for i, line in enumerate(lines):
+            lineimg = drawCoordinate(vietslice, line)
+            imname = "imline-" + str(i) + ".png"
+            impath = os.path.join(self.utilsImageDir, imname)
+            imarr = np.array(Image.open(impath))
+            self.compareArrays(imarr, lineimg,
+                               "comparison of line image " + str(i) + " failed"
+                               )
 
 
 if __name__ == "__main__":

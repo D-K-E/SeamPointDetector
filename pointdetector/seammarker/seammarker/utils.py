@@ -36,18 +36,43 @@ def getDiffDirection(stepsize: int,
     return [rowdiff, coldiff]
 
 
-def getStraightLineWithSteps(point1: {"x": int, "y": int},
-                             point2: {"x": int, "y": int},
-                             stepsize=1,
-                             isArr=False):
+def getRowColumnMask(line: np.ndarray, coordarr: np.ndarray) -> np.ndarray:
+    """Get row column boolean mask indicating whether line coordinates are in
+    coordinate array
     """
-        Get line from points including the points included in the line
-        Bresenham's line algorithm adapted from pseudocode in wikipedia:
-        https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+    cols = line[:, 1]
+    rows = line[:, 0]
+    rowbool = np.isin(rows, coordarr[:, 0])
+    colbool = np.isin(cols, coordarr[:, 1])
+    mask = rowbool & colbool
+    return mask
 
-        image should be grayscale
 
-        """
+def filterLineCoordsWithCoordinates(line: np.ndarray,
+                                    coordarr: np.ndarray) -> np.ndarray:
+    "Filter line coordinates using coordinate array"
+    mask = getRowColumnMask(line, coordarr)
+    line = line[mask, :]
+    newline = []
+    for i in range(line.shape[0]):
+        coord = line[i, :]
+        if any(np.equal(coordarr, coord).all(axis=1)):
+            newline.append(coord)
+    return np.array(newline, dtype=np.int)
+
+
+def getStraightLinePointsWithSteps(
+        point1: {"x": int, "y": int},
+        point2: {"x": int, "y": int},
+        stepsize=1):
+    """
+    Get line from points including the points included in the line
+    Bresenham's line algorithm adapted from pseudocode in wikipedia:
+    https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+
+    image should be grayscale
+
+    """
     #  define local variables for readability
     P1X = point1['x']
     P1Y = point1["y"]
@@ -86,7 +111,7 @@ def getStraightLineWithSteps(point1: {"x": int, "y": int},
     arrival_condition = bool((P1X, P1Y) == (P2X, P2Y))
     #
     line_points = []
-    line_points.append([P1X, P1Y])
+    line_points.append([P1Y, P1X])
     #
     while arrival_condition is False:
         error2 = error
@@ -99,50 +124,182 @@ def getStraightLineWithSteps(point1: {"x": int, "y": int},
             P1Y = P1Y + steepy
             #
             # Check
-        line_points.append([P1X, P1Y])
-        arrival_condition = bool((P1X, P1Y) == (P2X, P2Y))
+        line_points.append([P1Y, P1X])
+        arrival_condition = bool((P1Y, P1X) == (P2Y, P2X))
     #
-    if isArr:
-        line_points = np.array(line_points, dtype=np.int)
+    line_points = np.array(line_points, dtype=np.int)
     return line_points
 
 
-def getRowColumnMask(line: np.ndarray, coordarr: np.ndarray) -> np.ndarray:
-    """Get row column boolean mask indicating whether line coordinates are in
-    coordinate array
+def getStraightLineWithStepsInZone(point1: {"x": int, "y": int},
+                                   point2: {"x": int, "y": int},
+                                   zone: np.ndarray,
+                                   stepsize=1
+                                   ):
     """
-    cols = line[:, 1]
-    rows = line[:, 0]
-    rowbool = np.isin(rows, coordarr[:, 0])
-    colbool = np.isin(cols, coordarr[:, 1])
-    mask = rowbool & colbool
-    return mask
+    Get line from points including the points included in the line
+    Bresenham's line algorithm adapted from pseudocode in wikipedia:
+    https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+
+    image should be grayscale
+
+    """
+    #  define local variables for readability
+    P1X = point1['x']
+    P1Y = point1["y"]
+    P2X = point2["x"]
+    P2Y = point2["y"]
+
+    #  difference and absolute difference between points
+    #  used to calculate slope and relative location between points
+    diffX = P2X - P1X
+    diffXa = np.absolute(diffX, dtype="int32")
+    diffY = P2Y - P1Y
+    diffYa = np.absolute(diffY, dtype="int32")
+    #
+    steepx = stepsize
+    if P1X < P2X:
+        steepx = stepsize
+    else:
+        steepx = -stepsize
+    #
+    if P1Y < P2Y:
+        steepy = stepsize
+    else:
+        steepy = -stepsize
+    #
+    div_term = diffXa
+    #
+    if diffXa > diffYa:
+        div_term = diffXa
+    else:
+        div_term = -diffYa
+        #
+    error = div_term / 2
+    #
+    error2 = 0
+    #
+    arrival_condition = bool((P1X, P1Y) == (P2X, P2Y))
+    #
+    line_points = []
+    line_points.append([P1Y, P1X])
+    #
+    while arrival_condition is False:
+        error2 = error
+        if error2 > -diffXa:
+            error = error - diffYa
+            P1X = P1X + steepx
+            #
+        if error2 < diffYa:
+            error = error + diffXa
+            P1Y = P1Y + steepy
+            #
+            # Check
+        line_points.append([P1Y, P1X])
+        arrival_condition = bool((P1Y, P1X) == (P2Y, P2X))
+    #
+    line_points = np.array(line_points, dtype=np.int)
+    line_points = filterLineCoordsWithCoordinates(line=line_points,
+                                                  coordarr=zone)
+    return line_points
 
 
-def filterLineCoordsWithCoordinates(line: np.ndarray,
-                                    coordarr: np.ndarray) -> np.ndarray:
-    "Filter line coordinates using coordinate array"
-    mask = getRowColumnMask(line, coordarr)
-    line = line[mask]
-    return line
+def getStraightLineWithoutEnergy(point1: {"x": int, "y": int},
+                                 point2: {"x": int, "y": int},
+                                 image: np.ndarray,
+                                 stepsize=1,
+                                 threshold=0):
+    """
+    Get line from points including the points included in the line
+    Bresenham's line algorithm adapted from pseudocode in wikipedia:
+    https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+
+    image should be grayscale
+
+    Line should have less energy than the threshold
+
+    """
+    #  define local variables for readability
+    P1X = point1['x']
+    P1Y = point1["y"]
+    P2X = point2["x"]
+    P2Y = point2["y"]
+
+    #  difference and absolute difference between points
+    #  used to calculate slope and relative location between points
+    diffX = P2X - P1X
+    diffXa = np.absolute(diffX, dtype="int32")
+    diffY = P2Y - P1Y
+    diffYa = np.absolute(diffY, dtype="int32")
+    #
+    steepx = stepsize
+    if P1X < P2X:
+        steepx = stepsize
+    else:
+        steepx = -stepsize
+    #
+    if P1Y < P2Y:
+        steepy = stepsize
+    else:
+        steepy = -stepsize
+    #
+    div_term = diffXa
+    #
+    if diffXa > diffYa:
+        div_term = diffXa
+    else:
+        div_term = -diffYa
+        #
+    error = div_term / 2
+    #
+    error2 = 0
+    #
+    arrival_condition = bool((P1X, P1Y) == (P2X, P2Y))
+    #
+    line_points = []
+    line_points.append([P1Y, P1X])
+    #
+    while arrival_condition is False:
+        error2 = error
+        if error2 > -diffXa:
+            error = error - diffYa
+            P1X = P1X + steepx
+            #
+        if error2 < diffYa:
+            error = error + diffXa
+            P1Y = P1Y + steepy
+            #
+            # Check
+        line_points.append([P1Y, P1X])
+        imgEnergy = image[P1Y, P1X]
+        arrival_condition = bool(
+            (P1Y, P1X) == (P2Y, P2X) and imgEnergy <= threshold
+        )
+    #
+    line_points = np.array(line_points, dtype=np.int)
+    return line_points
 
 
-def addLine2Lines(lines: [np.ndarray], line: np.ndarray):
+def filterLines4UniqueCoordinates(lines: [np.ndarray]):
     "Add line to lines if line coordinates are not in any of the lines"
-    checks = []
-    for inline in lines:
-        mask = getRowColumnMask(line, inline)
-        check = mask.all()
-        checks.append(check)
-    if all(checks):
-        lines.append(line)
-
+    newlines = []
+    while lines:
+        inline = lines.pop()
+        checks = []
+        for line in lines:
+            mask = getRowColumnMask(inline, coordarr=line)
+            check = mask.all()
+            checks.append(check)
+        checks = np.array(checks, dtype=np.bool)
+        if checks.all() is False:
+            print("coordinate check false")
+            newlines.append(inline)
+    #
+    return newlines
 
 
 def getLinesFromCoordinates(coordarr: np.ndarray):
-    """
-    Obtain lines from coordinate array
-    """
+    """Obtain lines from coordinate array"""
     assert len(coordarr.shape) == 2
     assert coordarr.shape[1] == 2
     minRow = coordarr[:, 0].min()
@@ -156,9 +313,13 @@ def getLinesFromCoordinates(coordarr: np.ndarray):
                       "y": minRow}
             point2 = {"x": c,
                       "y": maxRow}
-            line = getStraightLineWithSteps(point1, point2, isArr=True)
-            line = filterLineCoordsWithCoordinates(line, coordarr)
+            line = getStraightLineWithStepsInZone(point1,
+                                                  point2,
+                                                  zone=coordarr)
+            # line = filterLineCoordsWithCoordinates(line, coordarr)
             minMaxLines.append(line)
+    #
+    # minMaxLines = filterLines4UniqueCoordinates(minMaxLines)
     return minMaxLines
 
 

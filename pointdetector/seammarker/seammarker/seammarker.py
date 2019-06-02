@@ -67,7 +67,8 @@ class SeamFuncs:
 
         for i in range(1, r):
             for j in range(0, c):
-                # Handle the left edge of the image, to ensure we don't index -1
+                # Handle the left edge of the image, to ensure 
+                # we don't index -1
                 if j == 0:
                     offset_value = j
                     colrange = j + 2
@@ -113,101 +114,6 @@ class SeamFuncs:
             # and save mark positions for later use
             mask[i, j] = True
             j = backtrack[i, j]
-
-        # Since the image has 3 channels, we convert our
-        # mask to 3D
-        mask = np.stack([mask] * 3, axis=2)
-
-        # mark the pixels with the given mark color
-        imcopy = np.where(mask, mark_color, img)
-
-        return imcopy, mask
-
-    def minimum_seam_v2(self, img: np.ndarray([], dtype=np.uint8),
-                        emap=None):
-        """
-        Minimum seam using a window around pixels
-        """
-        r, c, _ = img.shape
-
-        # if the energy map is already calculated
-        if emap is not None:
-            energy_map = emap
-        else:
-            energy_map = self.calc_energy(img)
-
-        M = energy_map.copy()
-        backtrack = np.zeros((r, c, 6), dtype=np.int)
-
-        for i in range(1, r):
-            for j in range(0, c):
-                # handle both left and right edges of the image
-                if j == 0:
-                    offset_value = j
-                    colrange = j + 2
-                    maprow = M[i - 1, offset_value:colrange]
-                    localMinEnergy = maprow.min()
-                    min_energy_indx_in_row = np.argmin(maprow)
-                    min_energy_indx_col = min_energy_indx_in_row + offset_value
-                    minRowVal = i - 1
-                    minColVal = min_energy_indx_col
-                elif j == c-1:
-                    offset_value = j - 1
-                    colrange = j + 2
-                    maprow = M[i - 1, offset_value:colrange]
-                    localMinEnergy = maprow.min()
-                    min_energy_indx_in_row = np.argmin(maprow)
-                    min_energy_indx_col = min_energy_indx_in_row + offset_value
-                    minRowVal = i - 1
-                    minColVal = min_energy_indx_col
-                    backtrack[i, j] = [i - 1, min_energy_indx_col,
-                                       i, j,
-                                       localMinEnergy, globalMinEnergy
-                                       ]
-                else:
-                    col_offset_value = j - 1
-                    colrange = j + 2
-                    row_offset_value = i - 1
-                    rowrange = i + 2
-                    imageWindow = M[row_offset_value:rowrange,
-                                    col_offset_value:colrange]
-                    minIndex = np.unravel_index(np.argmin(imageWindow,
-                                                          axis=None),
-                                                imageWindow.shape)
-                    localMinEnergy = imageWindow[minIndex]
-                    minRowVal = minIndex[0] + row_offset_value
-                    minColVal = minIndex[1] + col_offset_value
-
-                M[i, j] += localMinEnergy
-                globalMinEnergy = M[i, j]
-                backtrack[i, j] = [minRowVal, minColVal, localMinEnergy,
-                                   i, j, globalMinEnergy]
-        return M, backtrack
-
-    def mark_column_v2(self,
-                       img: np.ndarray([], dtype=np.uint8),
-                       emap=None,
-                       mark_color=[250, 120, 120]  # yellow
-                       ):
-        r, c, _ = img.shape
-        imcopy = img.copy()
-
-        M, backtrack = self.minimum_seam_v2(img, emap)
-
-        # Create a (r, c) matrix filled with the value True
-        # We'll be marking all pixels from the image which
-        # have False later
-        mask = np.zeros((r, c), dtype=np.bool)
-
-        # Find the position of the smallest element in the
-        # last row of M
-        colindx = np.argmin(M[-1])
-
-        for i in reversed(range(r)):
-            # Mark the pixels
-            # and save mark positions for later use
-            mask[i, colindx] = True
-            i, colindx = backtrack[i, colindx]
 
         # Since the image has 3 channels, we convert our
         # mask to 3D
@@ -485,14 +391,14 @@ class SeamFuncsAI(SeamFuncs):
         and incrementing row values.
         Horizontal movement means moving in the same row,
         and incrementing column values.
-        Diagonal movement means moving in row and column 
+        Diagonal movement means moving in row and column
         at the same time
 
         First we find unique column values in the zone.
         If we can move vertically than we should have multiple
         row values attested for the same column.
 
-        Once we have the unique column values and the count for 
+        Once we have the unique column values and the count for
         each of the values we skip those that have a count less than 2
 
         Then for each unique column value we stock row values associated
@@ -783,7 +689,7 @@ class SeamFuncsAI(SeamFuncs):
         2. Create a frontier containing explored nodes
         3. Create pruning criterias for frontier
         4. Obtain the indices of zero energy zones from the image
-        5. Regroup zero energy indices into moves so that each move 
+        5. Regroup zero energy indices into moves so that each move
         is associated to a zone array.
             5.1 Create zone array
         A zone array contains 1 or multiple zones where a move can be done
@@ -809,7 +715,7 @@ class SeamFuncsAI(SeamFuncs):
         12. Add the state to explored states
         13. Check if the current path attains a goal state, if it does
         terminate the loop and return the path
-        14. Check if the last state is in zero energy zone: 
+        14. Check if the last state is in zero energy zone:
             if it does
             14.1 Check if zone matrix of a move contains the state
                 if not:
@@ -817,7 +723,7 @@ class SeamFuncsAI(SeamFuncs):
             14.2 Create minimalZoneMove list
             14.3 for all zone matrices associated to a move
                 14.3.1 Obtain the zone that contains the state
-                14.3.2 Compute the closest point and its distance in 
+                14.3.2 Compute the closest point and its distance in
                        the zone to any of the goal states.
                 14.3.3 add the zone, closest point, goal state and move
                        to minimalZoneMove list
@@ -842,7 +748,7 @@ class SeamFuncsAI(SeamFuncs):
                        value in it
                 14.6.7 remove newly computed distance from the element
                 14.6.8 assign minimalZoneMove2 to minimalZoneMove
-            14.7 Obtain from the only element of minimalZoneMove: zone, move, 
+            14.7 Obtain from the only element of minimalZoneMove: zone, move,
                  closest point
             14.8 Compute the step cost from the current state to the closest
                  point of the move within the zone

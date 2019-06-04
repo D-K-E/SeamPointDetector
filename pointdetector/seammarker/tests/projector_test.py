@@ -39,6 +39,14 @@ class ProjectorTest(unittest.TestCase):
         self.GEN_SLICE_ELLIPSE_IMAGE_MASK = False
         self.slice_img_ellipse_path = os.path.join(self.projectorImageDir,
                                                    "sliceEllipseFromImage.png")
+        self.GEN_SLICE_THICKLINE_IMAGE_MASK = False
+        self.slice_img_thickline_path = os.path.join(
+            self.projectorImageDir,
+            "sliceThickLineFromImage.png"
+        )
+        self.GEN_SLICE_POLYGON_IMAGE = False
+        self.slice_img_polygon_path = os.path.join(self.projectorImageDir,
+                                                   "slicePolygonFromImage.png")
 
     def compareArrays(self, arr1, arr2, message):
         "Compare arrays for equality"
@@ -83,6 +91,46 @@ class ProjectorTest(unittest.TestCase):
                                                     "y2": y2})
             newimg = Image.fromarray(newimg)
             newimg.save(self.slice_img_ellipse_path)
+
+    def generateSliceThickLineFromImage(self):
+        if self.GEN_SLICE_THICKLINE_IMAGE_MASK:
+            vietImg = np.array(Image.open(self.image_col_path).copy())
+            rownb, colnb = vietImg.shape[:2]
+            width = 200
+            height = 300
+            halfrow = rownb // 2
+            halfcol = colnb // 2
+            thickness = 6
+            y1 = halfrow - height
+            y2 = halfrow + height
+            x1 = halfcol - width
+            x2 = halfcol + width
+            newimg = pj.sliceThickLineFromImage(vietImg.copy(),
+                                                bbox={"x1": x1,
+                                                      "x2": x2,
+                                                      "y1": y1,
+                                                      "y2": y2},
+                                                line_width=thickness)
+            newimg = Image.fromarray(newimg)
+            newimg.save(self.slice_img_thickline_path)
+
+    def generateSlicePolygonFromImage(self):
+        if self.GEN_SLICE_THICKLINE_IMAGE_MASK:
+            vietImg = np.array(Image.open(self.image_col_path).copy())
+            rownb, colnb = vietImg.shape[:2]
+            width1 = 200
+            height1 = 300
+            halfrow = rownb // 2
+            halfcol = colnb // 2
+            p1 = {"x": halfcol - width1, "y": halfrow - height1}
+            p2 = {"x": p1['x'] + width1 // 2, "y": p1['y']}
+            p3 = {"x": halfcol, "y": halfrow}
+            p4 = {"x": halfcol + width1, "y": halfrow + height1}
+            p5 = {"x": halfcol + width1 // 3, "y": halfrow + height1 // 2}
+            coords = [p1, p2, p3, p4, p5]
+            newimg = pj.slicePolygonFromImage(vietImg.copy(), coords)
+            newimg = Image.fromarray(newimg)
+            newimg.save(self.slice_img_polygon_path)
 
     def test_sliceImageWithMask(self):
         "test slice image with mask works for a rectangle"
@@ -132,16 +180,60 @@ class ProjectorTest(unittest.TestCase):
         height = 300
         halfrow = rownb // 2
         halfcol = colnb // 2
+        thickness = 6
         y1 = halfrow - height
         y2 = halfrow + height
         x1 = halfcol - width
         x2 = halfcol + width
-        newimg = pj.sliceEllipseFromImage(vietImg.copy(),
-                                          bbox={"x1": x1,
-                                                "x2": x2,
-                                                "y1": y1,
-                                                "y2": y2})
+        newimg = pj.sliceThickLineFromImage(vietImg.copy(),
+                                            bbox={"x1": x1,
+                                                  "x2": x2,
+                                                  "y1": y1,
+                                                  "y2": y2},
+                                            line_width=thickness)
+        compimg = Image.open(self.slice_img_thickline_path)
+        comparr = np.array(compimg)
+        self.compareArrays(comparr, newimg,
+                           "Image Slice not same with expected image")
 
+    def test_slicePolygonFromImage(self):
+        "Test if we can slice a polygon from image"
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width1 = 200
+        height1 = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        p1 = {"x": halfcol - width1, "y": halfrow - height1}
+        p2 = {"x": p1['x'] + width1 // 2, "y": p1['y']}
+        p3 = {"x": halfcol, "y": halfrow}
+        p4 = {"x": halfcol + width1, "y": halfrow + height1}
+        p5 = {"x": halfcol + width1 // 3, "y": halfrow + height1 // 2}
+        coords = [p1, p2, p3, p4, p5]
+        newimg = pj.slicePolygonFromImage(vietImg.copy(), coords)
+        compimg = Image.open(self.slice_img_polygon_path)
+        comparr = np.array(compimg)
+        self.compareArrays(comparr, newimg,
+                           "Image Slice not same with expected image")
+
+    def test_getEllipseCoordsInBbox(self):
+        "test obtaining ellipse coordinates in bbox"
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width = 200
+        height = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        y1 = halfrow - height
+        y2 = halfrow + height
+        x1 = halfcol - width
+        x2 = halfcol + width
+        bbox = {"x1": x1,
+                "x2": x2,
+                "y1": y1,
+                "y2": y2}
+        pdb.set_trace()
+        coords = pj.getEllipseCoordsInBbox(bbox)
 
 
 if __name__ == "__main__":

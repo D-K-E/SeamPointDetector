@@ -533,9 +533,9 @@ class ProjectorTest(unittest.TestCase):
         comphoffset = 0
         comparr1 = np.array(Image.open(self.syntetic_half_img_path))
         comparr2 = np.array(Image.open(self.syntetic_appended_img_path))
-        pdb.set_trace()
-        comparr3 = np.array(Image.open(self.syntetic_half_arr_path))
-        comparr4 = np.array(Image.open(self.syntetic_appended_arr_path))
+        # pdb.set_trace()
+        comparr3 = np.load(self.syntetic_half_arr_path)
+        comparr4 = np.load(self.syntetic_appended_arr_path)
         self.assertEqual(compvoffset, voffset)
         self.assertEqual(comphoffset, hoffset)
         self.assertEqual((rownb, colnb, pixnb),

@@ -61,9 +61,23 @@ class ProjectorTest(unittest.TestCase):
                                                    "slicePolygonFromImage.npy")
         self.GEN_ELLIPSE_HALVES_IMAGE = False
         self.ellipse_half1_img_path = os.path.join(self.projectorImageDir,
-                                                  "cutEllipse2Half1.png")
+                                                   "cutEllipse2Half1.png")
         self.ellipse_half2_img_path = os.path.join(self.projectorImageDir,
-                                                  "cutEllipse2Half2.png")
+                                                   "cutEllipse2Half2.png")
+        self.GEN_ELLIPSE_HALVES_ARR = False
+        self.ellipse_half1_arr_path = os.path.join(self.projectorNumpyDir,
+                                                   "cutEllipse2Half1Mask.npy")
+        self.ellipse_half2_arr_path = os.path.join(self.projectorNumpyDir,
+                                                   "cutEllipse2Half2Mask.npy")
+        self.syntetic_half_img_path = os.path.join(self.projectorImageDir,
+                                                   "synteticFirstHalf.png")
+        self.syntetic_appended_img_path = os.path.join(self.projectorImageDir,
+                                                       "synteticAppended.png")
+        self.syntetic_half_arr_path = os.path.join(self.projectorNumpyDir,
+                                                   "synteticFirstMask.npy")
+        self.syntetic_appended_arr_path = os.path.join(
+            self.projectorNumpyDir,
+            "synteticAppendedMask.npy")
 
     def compareArrays(self, arr1, arr2, message):
         "Compare arrays for equality"
@@ -393,6 +407,146 @@ class ProjectorTest(unittest.TestCase):
                            "First half of ellipse not correctly cut")
         self.compareArrays(secondHalf, compimg2,
                            "Second half of ellipse not correctly cut")
+
+    def test_cutEllipse2HalfWithMask(self):
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width = 200
+        height = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        y1 = halfrow - height
+        y2 = halfrow + height
+        x1 = halfcol - width
+        x2 = halfcol + width
+        (firstHalf, mask1,
+         secondHalf, mask2) = pj.cutEllipse2Half(vietImg.copy(),
+                                                 bbox={"x1": x1,
+                                                       "x2": x2,
+                                                       "y1": y1,
+                                                       "y2": y2},
+                                                 withMask=True)
+        compimg1 = Image.open(self.ellipse_half1_img_path)
+        compimg2 = Image.open(self.ellipse_half2_img_path)
+        compmask1 = np.load(self.ellipse_half1_arr_path)
+        compmask2 = np.load(self.ellipse_half2_arr_path)
+        comparr1, comparr2 = np.array(compimg1), np.array(compimg2)
+        self.compareArrays(firstHalf, compimg1,
+                           "First half of ellipse not correctly cut")
+        self.compareArrays(secondHalf, compimg2,
+                           "Second half of ellipse not correctly cut")
+        self.compareArrays(mask1, compmask1,
+                           "First half mask not correct")
+        self.compareArrays(mask2, compmask2,
+                           "Second half mask not correct")
+
+    def test_findCenterPoint(self):
+        bbox = {"x1": 10, "x2": 20, "y1": 30, "y2": 40}
+        compCenter = {"x": 15, "y": 35}
+        center = pj.findCenterInBbox(bbox)
+        self.assertDictEqual(compCenter, center)
+
+    def test_appendSecondHalf2FirstHalfEllipseWithoutMask(self):
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width = 200
+        height = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        y1 = halfrow - height
+        y2 = halfrow + height
+        x1 = halfcol - width
+        x2 = halfcol + width
+        bbox = {"x1": x1,
+                "x2": x2,
+                "y1": y1,
+                "y2": y2}
+        center = {"x": (bbox["x1"] + bbox["x2"]) // 2,
+                  "y": (bbox["y1"] + bbox["y2"]) // 2}
+        firstHalf = np.array(Image.open(self.ellipse_half1_img_path).copy())
+        secondHalf = np.array(Image.open(self.ellipse_half2_img_path).copy())
+        firstMask = np.load(self.ellipse_half1_arr_path)
+        secondMask = np.load(self.ellipse_half2_arr_path)
+        (synteticFirstHalf, synteticAppended,
+         voffset, hoffset, (rownb,
+                            colnb, pixnb)) = pj.appendSecondHalf2FirstHalfEllipse(
+            firstHalf=firstHalf,
+            firstHalfMask=firstMask,
+            secondHalf=secondHalf,
+            secondHalfMask=secondMask,
+            centerPoint=center,
+            bbox=bbox,
+            shapePixelValue=255,
+            withMask=False)
+        comprownb, comcolnb, compixnb = firstHalf.shape
+        compvoffset = max(bbox['y1'], bbox['y2']) - min(bbox['y1'],
+                                                        bbox['y2'])
+        # comphoffset = center['x'] - min(bbox['x1'], bbox['x2'])
+        comphoffset = 0
+        comparr1 = np.array(Image.open(self.syntetic_half_img_path))
+        comparr2 = np.array(Image.open(self.syntetic_appended_img_path))
+        self.assertEqual(compvoffset, voffset)
+        self.assertEqual(comphoffset, hoffset)
+        self.assertEqual((rownb, colnb, pixnb),
+                         (comprownb, comcolnb, compixnb))
+        self.compareArrays(comparr1, synteticFirstHalf, "First halves")
+        self.compareArrays(comparr2, synteticAppended, "Appended syntetic")
+
+    def test_appendSecondHalf2FirstHalfEllipseWithMask(self):
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width = 200
+        height = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        y1 = halfrow - height
+        y2 = halfrow + height
+        x1 = halfcol - width
+        x2 = halfcol + width
+        bbox = {"x1": x1,
+                "x2": x2,
+                "y1": y1,
+                "y2": y2}
+        center = {"x": (bbox["x1"] + bbox["x2"]) // 2,
+                  "y": (bbox["y1"] + bbox["y2"]) // 2}
+        firstHalf = np.array(Image.open(self.ellipse_half1_img_path).copy())
+        secondHalf = np.array(Image.open(self.ellipse_half2_img_path).copy())
+        firstMask = np.load(self.ellipse_half1_arr_path)
+        secondMask = np.load(self.ellipse_half2_arr_path)
+        (synteticFirstHalf, synteticFirstMask,
+         synteticAppended, synteticAppendedMask,
+         voffset, hoffset, (rownb,
+                            colnb,
+                            pixnb)) = pj.appendSecondHalf2FirstHalfEllipse(
+            firstHalf=firstHalf,
+            firstHalfMask=firstMask,
+            secondHalf=secondHalf,
+            secondHalfMask=secondMask,
+            centerPoint=center,
+            bbox=bbox,
+            shapePixelValue=255,
+            withMask=True)
+        comprownb, comcolnb, compixnb = firstHalf.shape
+        compvoffset = max(bbox['y1'], bbox['y2']) - min(bbox['y1'],
+                                                        bbox['y2'])
+        # comphoffset = center['x'] - min(bbox['x1'], bbox['x2'])
+        comphoffset = 0
+        comparr1 = np.array(Image.open(self.syntetic_half_img_path))
+        comparr2 = np.array(Image.open(self.syntetic_appended_img_path))
+        pdb.set_trace()
+        comparr3 = np.array(Image.open(self.syntetic_half_arr_path))
+        comparr4 = np.array(Image.open(self.syntetic_appended_arr_path))
+        self.assertEqual(compvoffset, voffset)
+        self.assertEqual(comphoffset, hoffset)
+        self.assertEqual((rownb, colnb, pixnb),
+                         (comprownb, comcolnb, compixnb))
+        self.compareArrays(comparr1, synteticFirstHalf, "First halves")
+        self.compareArrays(comparr2, synteticAppended, "Appended syntetic")
+        self.compareArrays(comparr3, synteticFirstMask, "First halves")
+        self.compareArrays(comparr4, synteticAppendedMask, "First halves")
+
+    def test_putsecondHalf2OriginalPosition_withoutMask(self):
+        pass
 
 
 if __name__ == "__main__":

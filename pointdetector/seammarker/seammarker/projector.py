@@ -14,7 +14,7 @@ def sliceImageWithMask(image: np.ndarray, mask: np.ndarray):
 
 def sliceCoordinatesFromMask(mask: np.ndarray):
     "Get coordinates from mask"
-    return np.argwhere(mask == True)  # operator is == not 'is'
+    return np.argwhere(mask)
 
 
 def sliceShapeFromImage(image: np.ndarray,
@@ -31,6 +31,13 @@ def sliceShapeFromImage(image: np.ndarray,
     else:
         return (sliceImageWithMask(image, mask_bool),
                 sliceCoordinatesFromMask(mask_bool))
+
+
+def findCenterInBbox(bbox: {"x1": int, "y1": int,
+                            "x2": int, "y2": int}) -> {"x": int, "y": int}:
+    "Find center point in bbox"
+    return {"x": (bbox['x1'] + bbox['x2']) // 2,
+            "y": (bbox['y1'] + bbox['y2']) // 2}
 
 
 def drawEllipseWithBbox(image: np.ndarray,
@@ -66,7 +73,8 @@ def cutEllipse2Half(image: np.ndarray,
                                                         withCoord=True)
     rownb, colnb, pixelnb = ellipseImage.shape
     xindx = ellipseCoords[:, 1]
-    centerX = (bbox['x1'] + bbox['x2']) // 2
+    centerPoint = findCenterInBbox(bbox)
+    centerX = centerPoint['x']
     firstHalfEllipseCoords = ellipseCoords[xindx <= centerX]
     secondHalfEllipseCoords = ellipseCoords[xindx > centerX]
     yindx1 = firstHalfEllipseCoords[:, 0]
@@ -101,6 +109,18 @@ def appendSecondHalf2FirstHalfEllipse(firstHalf: np.ndarray,
     """
     Append the second half of the ellipse to first half
 
+    Description
+    ------------
+
+    We assume that the ellipse is vertically cut.
+    We take the half at the right side of the center, push it down, and move
+    it to left, using the center and the bbox as a reference.
+    Center gives us the horizontal offset for moving the half to left.
+    Bbox gives us the vertical offset for pushing it down
+
+    Parameters
+    -----------
+
     firstHalf: image containing first half of the ellipse
     firstHalfMask: image containing first half of the ellipse where ellipse is
     white/black and the background color is inverse of the ellipse
@@ -114,9 +134,14 @@ def appendSecondHalf2FirstHalfEllipse(firstHalf: np.ndarray,
     rownb, colnb, pixelnb = firstHalf.shape
     verticalOffsetValue = max(bbox['y1'], bbox['y2']) - min(bbox['y1'],
                                                             bbox['y2'])
-    horizontalOffsetValue = centerPoint['x'] - min(bbox['x1'], bbox['x2'])
+    # horizontalOffsetValue = centerPoint['x'] - min(bbox['x1'], bbox['x2'])
+    horizontalOffsetValue = 0
+    secondHalfMask2 = secondHalfMask.copy()
+    secondHalf2 = secondHalf.copy()
+    secondHalfMask2 = np.flipud(secondHalfMask2)
+    secondHalf2 = np.flipud(secondHalf2)
     mask_bool1 = firstHalfMask == shapePixelValue
-    mask_bool2 = secondHalfMask == shapePixelValue
+    mask_bool2 = secondHalfMask2 == shapePixelValue
     firstHalfCoordinates = sliceCoordinatesFromMask(mask_bool1)
     fyindx = firstHalfCoordinates[:, 0]
     fxindx = firstHalfCoordinates[:, 1]
@@ -126,7 +151,7 @@ def appendSecondHalf2FirstHalfEllipse(firstHalf: np.ndarray,
     sxindx = secondHalfCoordinates[:, 1]
     szindx = secondHalfCoordinates[:, 2]
     syindx2 = syindx + verticalOffsetValue
-    sxindx2 = sxindx + horizontalOffsetValue
+    sxindx2 = sxindx - horizontalOffsetValue
     synteticImage = np.full((rownb * 2, colnb, pixelnb), 255, dtype=np.uint8)
     firstHalfSynteticImage = synteticImage.copy()
     appendedSynteticImage = synteticImage.copy()
@@ -135,7 +160,7 @@ def appendSecondHalf2FirstHalfEllipse(firstHalf: np.ndarray,
     appendedSynteticImage[fyindx, fxindx,
                           fzindx] = firstHalf[fyindx, fxindx, fzindx]
     appendedSynteticImage[syindx2,
-                          sxindx2, szindx] = secondHalf[syindx, sxindx,
+                          sxindx2, szindx] = secondHalf2[syindx, sxindx,
                                                         szindx]
     if withMask:
         synteticImageMask = np.zeros((rownb * 2, colnb, pixelnb), dtype=np.int)
@@ -154,6 +179,7 @@ def appendSecondHalf2FirstHalfEllipse(firstHalf: np.ndarray,
                 verticalOffsetValue, horizontalOffsetValue,
                 (rownb, colnb, pixelnb))
 
+
 def putSecondHalf2OriginalPosition(firstHalfSynteticImage: np.ndarray,
                                    appendedSynteticImage: np.ndarray,
                                    firstHalfMask: np.ndarray,
@@ -170,17 +196,22 @@ def putSecondHalf2OriginalPosition(firstHalfSynteticImage: np.ndarray,
     fxindx = firstHalfCoords[:, 1]
     fzindx = firstHalfCoords[:, 2]
     appendedMask[fyindx, fxindx, fzindx] = 0
+    appendedMask2 = appendedMask.copy()
+    appendedMask2 = np.flipud(appendedMask2)
+    appendedSynteticImage2 = appendedSynteticImage.copy()
+    appendedSynteticImage2[fyindx, fxindx, fzindx] = 255
+    appendedSynteticImage2 = np.flipud(appendedSynteticImage2)
     mask_bool2 = appendedMask == shapePixelValue
     secondHalfCoords = sliceCoordinatesFromMask(mask_bool2)
     syindx_off = secondHalfCoords[:, 0]
     sxindx_off = secondHalfCoords[:, 1]
     szindx = secondHalfCoords[:, 2]
     syindx = syindx_off - verticalOffset
-    sxindx = sxindx_off - horizontalOffset
+    sxindx = sxindx_off + horizontalOffset
     origImg = np.full(imshape, 255, dtype=np.uint8)
     origImg[fyindx, fxindx, fzindx] = firstHalfSynteticImage[fyindx, fxindx,
                                                              fzindx]
-    origImg[syindx, sxindx, szindx] = appendedSynteticImage[syindx_off,
+    origImg[syindx, sxindx, szindx] = appendedSynteticImage2[syindx_off,
                                                             sxindx_off,
                                                             szindx]
     if withMask:

@@ -79,6 +79,7 @@ class ProjectorTest(unittest.TestCase):
             self.projectorNumpyDir,
             "synteticAppendedMask.npy")
 
+
     def compareArrays(self, arr1, arr2, message):
         "Compare arrays for equality"
         result = arr1 == arr2
@@ -546,7 +547,86 @@ class ProjectorTest(unittest.TestCase):
         self.compareArrays(comparr4, synteticAppendedMask, "First halves")
 
     def test_putsecondHalf2OriginalPosition_withoutMask(self):
-        pass
+        firstSynteticImg = np.array(Image.open(self.syntetic_half_img_path))
+        appendedImg = np.array(Image.open(self.syntetic_appended_img_path))
+        firstHalfMask = np.load(self.syntetic_half_arr_path)
+        appendedMask = np.load(self.syntetic_appended_arr_path)
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width = 200
+        height = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        y1 = halfrow - height
+        y2 = halfrow + height
+        x1 = halfcol - width
+        x2 = halfcol + width
+        bbox = {"x1": x1,
+                "x2": x2,
+                "y1": y1,
+                "y2": y2}
+        center = {"x": (bbox["x1"] + bbox["x2"]) // 2,
+                  "y": (bbox["y1"] + bbox["y2"]) // 2}
+        voffset = max(bbox['y1'], bbox['y2']) - min(bbox['y1'],
+                                                        bbox['y2'])
+        hoffset = 0
+        imshape = vietImg.shape
+        origImg = pj.putSecondHalf2OriginalPosition(
+            firstHalfSynteticImage=firstSynteticImg,
+            appendedSynteticImage=appendedImg,
+            firstHalfMask=firstHalfMask,
+            appendedMask=appendedMask,
+            verticalOffset=voffset,
+            horizontalOffset=hoffset,
+            imshape=imshape,
+            shapePixelValue=255,
+            withMask=False)
+        pdb.set_trace()
+        compimg = np.array(Image.open(self.slice_img_ellipse_path))
+        self.compareArrays(origImg,
+                           compimg, "putback image not same with original")
+
+    def test_putsecondHalf2OriginalPosition_withMask(self):
+        firstSynteticImg = np.array(Image.open(self.syntetic_half_img_path))
+        appendedImg = np.array(Image.open(self.syntetic_appended_img_path))
+        firstHalfMask = np.load(self.syntetic_half_arr_path)
+        appendedMask = np.load(self.syntetic_appended_arr_path)
+        vietImg = np.array(Image.open(self.image_col_path).copy())
+        rownb, colnb = vietImg.shape[:2]
+        width = 200
+        height = 300
+        halfrow = rownb // 2
+        halfcol = colnb // 2
+        y1 = halfrow - height
+        y2 = halfrow + height
+        x1 = halfcol - width
+        x2 = halfcol + width
+        bbox = {"x1": x1,
+                "x2": x2,
+                "y1": y1,
+                "y2": y2}
+        center = {"x": (bbox["x1"] + bbox["x2"]) // 2,
+                  "y": (bbox["y1"] + bbox["y2"]) // 2}
+        voffset = max(bbox['y1'], bbox['y2']) - min(bbox['y1'],
+                                                        bbox['y2'])
+        hoffset = 0
+        imshape = vietImg.shape
+        (origImg, origImgMask) = pj.putSecondHalf2OriginalPosition(
+            firstHalfSynteticImage=firstSynteticImg,
+            appendedSynteticImage=appendedImg,
+            firstHalfMask=firstHalfMask,
+            appendedMask=appendedMask,
+            verticalOffset=voffset,
+            horizontalOffset=hoffset,
+            imshape=imshape,
+            shapePixelValue=255,
+            withMask=True)
+        compimg = np.array(Image.open(self.slice_img_ellipse_path))
+        comparr = np.load(self.slice_arr_ellipse_path)
+        self.compareArrays(origImg,
+                           compimg, "putback image not same with original")
+        self.compareArrays(origImgMask,
+                           comparr, "putback image not same with original")
 
 
 if __name__ == "__main__":

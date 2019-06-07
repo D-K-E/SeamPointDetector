@@ -201,7 +201,7 @@ def putSecondHalf2OriginalPosition(firstHalfSynteticImage: np.ndarray,
     appendedSynteticImage2 = appendedSynteticImage.copy()
     appendedSynteticImage2[fyindx, fxindx, fzindx] = 255
     appendedSynteticImage2 = np.flipud(appendedSynteticImage2)
-    mask_bool2 = appendedMask == shapePixelValue
+    mask_bool2 = appendedMask2 == shapePixelValue
     secondHalfCoords = sliceCoordinatesFromMask(mask_bool2)
     syindx_off = secondHalfCoords[:, 0]
     sxindx_off = secondHalfCoords[:, 1]

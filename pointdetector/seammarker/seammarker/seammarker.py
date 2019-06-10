@@ -11,6 +11,7 @@ import operator
 import pdb
 from seammarker.utils import getConsecutive1D
 from seammarker.utils import getConsecutive2D
+from seammarker import projector as pjr
 
 
 class SeamFuncs:
